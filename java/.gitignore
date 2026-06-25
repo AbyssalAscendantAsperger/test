@@ -1,0 +1,5 @@
+# Save game của người dùng (mỗi user/session 1 file) - KHÔNG commit
+saves/
+
+# Phụ thuộc
+node_modules/

@@ -12,118 +12,56 @@
             margin: 0;
             padding: 20px;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            color: #00d4ff;
-            margin: 0;
-        }
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #00d4ff; margin: 0; }
+        .container { max-width: 1100px; margin: 0 auto; }
         .jar-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 15px;
         }
         .jar-card {
-            background: #1a1a2e;
-            border-radius: 12px;
-            padding: 18px;
-            border: 1px solid #333;
-            transition: 0.2s;
-            cursor: pointer;
+            background: #1a1a2e; border-radius: 12px; padding: 18px;
+            border: 1px solid #333; transition: 0.2s; cursor: pointer;
         }
-        .jar-card:hover {
-            border-color: #00d4ff;
-            transform: translateY(-3px);
-        }
-        .jar-name {
-            font-weight: 600;
-            color: white;
-            margin-bottom: 6px;
-            word-break: break-all;
-            font-size: 13px;
-        }
+        .jar-card:hover { border-color: #00d4ff; transform: translateY(-3px); }
+        .jar-name { font-weight: 600; color: white; margin-bottom: 6px; word-break: break-all; font-size: 13px; }
         .play-btn {
-            background: #00d4ff;
-            color: black;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-weight: bold;
-            margin-top: 12px;
-            width: 100%;
-            cursor: pointer;
+            background: #00d4ff; color: black; border: none; padding: 8px 16px;
+            border-radius: 6px; font-weight: bold; margin-top: 12px; width: 100%; cursor: pointer;
         }
         .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.96);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.96); z-index: 9999; justify-content: center; align-items: center;
         }
         .modal-content {
-            background: #111;
-            border-radius: 6px;
-            overflow: hidden;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.95);
-            border: 2px solid #222;
-            width: 244px;
+            background: #111; border-radius: 6px; overflow: hidden;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.95); border: 2px solid #222; width: 244px;
         }
         .modal-header {
-            background: #1a1a2e;
-            padding: 4px 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 10px;
+            background: #1a1a2e; padding: 4px 8px; display: flex;
+            justify-content: space-between; align-items: center; font-size: 10px;
         }
-        .emulator-frame {
-            width: 240px;
-            height: 320px;
-            border: none;
-            background: #000;
-            display: block;
-        }
+        .emulator-frame { width: 240px; height: 320px; border: none; background: #000; display: block; }
         .modal-header h3 {
-            margin: 0;
-            color: #00d4ff;
-            font-size: 10px;
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            margin: 0; color: #00d4ff; font-size: 10px; max-width: 120px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .close-btn {
-            background: #ff4757;
-            color: white;
-            border: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 12px;
+            background: #ff4757; color: white; border: none; width: 18px; height: 18px;
+            border-radius: 50%; cursor: pointer; font-size: 12px;
         }
-        .status {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #00c853;
-            font-size: 14px;
+        .status { text-align: center; margin-bottom: 20px; color: #00c853; font-size: 14px; }
+        .hint { text-align: center; font-size: 9px; color: #555; padding: 2px; background: #1a1a2e; }
+        .save-status {
+            color: #00c853; font-size: 9px; margin-left: auto; margin-right: 6px;
+            max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .hint {
-            text-align: center;
-            font-size: 9px;
-            color: #555;
-            padding: 2px;
-            background: #1a1a2e;
+        .save-btn {
+            background: #2d4a2d; color: #6cff6c; border: none; width: 18px; height: 18px;
+            border-radius: 50%; cursor: pointer; font-size: 10px; margin-right: 4px;
         }
+        .save-btn:hover { background: #3a6b3a; }
     </style>
 </head>
 <body>
@@ -132,9 +70,7 @@
             <h1>🎮 J2ME Portal</h1>
             <p style="color:#888">Chọn game để chơi</p>
         </div>
-
         <div id="status" class="status"></div>
-        
         <div id="jarList" class="jar-list">
             <div style="text-align:center;color:#666">Đang tải...</div>
         </div>
@@ -145,6 +81,8 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle">Game</h3>
+                <span id="saveStatus" class="save-status">💾 sẵn sàng</span>
+                <button class="save-btn" title="Lưu ngay lên server" onclick="exportSave()">💾</button>
                 <button class="close-btn" onclick="closeEmulator()">×</button>
             </div>
             <iframe id="emulatorFrame" class="emulator-frame"></iframe>
@@ -155,30 +93,26 @@
     <script>
         let currentFrame = null;
         let keyListener = null;
+        let exitWatcher = null;
+        let autosaveTimer = null;
+        let closing = false;   // chống đóng/lưu 2 lần
 
         async function loadJars() {
             const container = document.getElementById('jarList');
             const status = document.getElementById('status');
-
             try {
                 const res = await fetch('/api/jars');
                 const data = await res.json();
-
                 if (data.error || !data.jars?.length) {
                     container.innerHTML = `<div style="color:#ff6b6b">Không tìm thấy file .jar</div>`;
                     return;
                 }
-
                 status.innerHTML = `✅ Tìm thấy ${data.jars.length} game`;
                 container.innerHTML = '';
-
                 data.jars.forEach(jar => {
                     const card = document.createElement('div');
                     card.className = 'jar-card';
-                    card.innerHTML = `
-                        <div class="jar-name">${jar}</div>
-                        <button class="play-btn">▶ Chơi ngay</button>
-                    `;
+                    card.innerHTML = `<div class="jar-name">${jar}</div><button class="play-btn">▶ Chơi ngay</button>`;
                     card.onclick = () => launchGame(jar);
                     container.appendChild(card);
                 });
@@ -191,20 +125,24 @@
             const modal = document.getElementById('emulatorModal');
             const frame = document.getElementById('emulatorFrame');
             const title = document.getElementById('modalTitle');
-
+            const status = document.getElementById('saveStatus');
             title.textContent = jarName;
             modal.style.display = 'flex';
             currentFrame = frame;
-
+            closing = false;
+            if (status) status.textContent = '⏳ đang tải save...';
             try {
+                // 1) SERVER LÀ NGUỒN DUY NHẤT: tải save từ server -> nạp vào fs trước khi load
+                await loadSaveFromServer();
+                // 2) load emulator
                 const res = await fetch(`/api/launch?jar=${encodeURIComponent(jarName)}`);
                 const data = await res.json();
-
                 if (data.success) {
                     frame.src = data.url;
-
                     setTimeout(() => {
                         setupKeyboardMapping(frame);
+                        hookExit(frame);      // CHẶN thoát của game + bật watcher
+                        startAutosave();      // tự lưu lên server định kỳ
                         frame.focus();
                     }, 2000);
                 }
@@ -213,119 +151,274 @@
             }
         }
 
-        // ==================== MAP PHÍM MẠNH (Gửi cả key + keyCode + MIDP) ====================
+        // ==================== MAP PHÍM (gửi thẳng MIDP, cùng origin) ====================
         function setupKeyboardMapping(iframe) {
             const keyMap = {
-                // WASD
-                'w': { key: 'ArrowUp',    code: -1 },
-                'a': { key: 'ArrowLeft',  code: -3 },
-                's': { key: 'ArrowDown',  code: -2 },
-                'd': { key: 'ArrowRight', code: -4 },
-
-                // Q/E
-                'q': { key: 'Q', code: -6 },
-                'e': { key: 'E', code: -7 },
-
-                // Space
-                ' ': { key: 'Enter', code: -5 },
-
-                // Số
-                '0': { key: '0', code: 48 },
-                '1': { key: '1', code: 49 },
-                '2': { key: '2', code: 50 },
-                '3': { key: '3', code: 51 },
-                '4': { key: '4', code: 52 },
-                '5': { key: '5', code: 53 },
-                '6': { key: '6', code: 54 },
-                '7': { key: '7', code: 55 },
-                '8': { key: '8', code: 56 },
-                '9': { key: '9', code: 57 },
-
-                // * #
-                '*': { key: '*', code: 42 },
-                '#': { key: '#', code: 35 }
+                'w': { code: -1 }, 'a': { code: -3 }, 's': { code: -2 }, 'd': { code: -4 },
+                'q': { code: -6 }, 'e': { code: -7 },
+                'z': { code: 122 }, 'c': { code: 99 },
+                ' ': { code: -5 },
+                '0': { code: 48 }, '1': { code: 49 }, '2': { code: 50 }, '3': { code: 51 },
+                '4': { code: 52 }, '5': { code: 53 }, '6': { code: 54 }, '7': { code: 55 },
+                '8': { code: 56 }, '9': { code: 57 },
+                '*': { code: 42 }, '#': { code: 35 }
             };
-
             function sendKey(mapped, isPress) {
                 try {
                     const win = iframe.contentWindow;
-                    if (!win) return;
-
-                    const eventType = isPress ? 'keydown' : 'keyup';
-
-                    // Gửi event đầy đủ
-                    const event = new KeyboardEvent(eventType, {
-                        key: mapped.key,
-                        keyCode: mapped.code,
-                        which: mapped.code,
-                        bubbles: true,
-                        cancelable: true
-                    });
-
-                    win.dispatchEvent(event);
-
-                    // Gọi trực tiếp MIDP (cách emulator gốc dùng)
-                    if (win.MIDP) {
-                        if (isPress && win.MIDP.sendKeyPress) {
-                            win.MIDP.sendKeyPress(mapped.code);
-                        } else if (!isPress && win.MIDP.sendKeyRelease) {
-                            win.MIDP.sendKeyRelease(mapped.code);
-                        }
-                    }
-                } catch (e) {}
+                    if (!win || !win.MIDP) return;
+                    if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(mapped.code);
+                    else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(mapped.code);
+                } catch (e) { console.error('[Portal] sendKey:', e.message); }
             }
-
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
                 document.removeEventListener('keyup', keyListener);
             }
-
             keyListener = function(e) {
                 if (!currentFrame) return;
                 const mapped = keyMap[e.key.toLowerCase()];
-                if (mapped) {
-                    e.preventDefault();
-                    sendKey(mapped, e.type === 'keydown');
-                    try {
-                        currentFrame.focus();
-                        currentFrame.contentWindow.focus();
-                    } catch(e){}
-                }
+                if (mapped) { e.preventDefault(); sendKey(mapped, e.type === 'keydown'); }
             };
-
             document.addEventListener('keydown', keyListener);
             document.addEventListener('keyup', keyListener);
-
             currentFrame.onclick = () => currentFrame.contentWindow.focus();
             currentFrame.ontouchstart = () => currentFrame.contentWindow.focus();
         }
 
-        function closeEmulator() {
+        // ==================== CHẶN THOÁT GAME + PHÁT HIỆN KHÔNG CHẠY ====================
+        // Ý tưởng: game thoát luôn đi qua showExitScreen() (global). Override nó ->
+        // chặn ngay TRƯỚC khi iframe navigate sang index.html -> không bao giờ lộ trang 8080.
+        // Kèm watcher dự phòng cho crash cứng (game chết mà không qua showExitScreen).
+        function hookExit(iframe) {
+            let win;
+            try { win = iframe.contentWindow; } catch (e) { return; }
+            if (!win) return;
+
+            // (A) CHỦ ĐỘNG: chặn hàm thoát của emulator
+            if (typeof win.showExitScreen === 'function') {
+                win.showExitScreen = function() {
+                    try { if (win.myflushAll) win.myflushAll(); } catch (e) {}
+                    console.log('[exit] showExitScreen bị chặn -> đóng modal ngay');
+                    handleGameExit('game thoát');
+                };
+                console.log('[exit] đã cài hook showExitScreen');
+            }
+
+            // (B) DỰ PHÒNG: watcher phát hiện "không còn chạy"
+            stopExitWatcher();
+            exitWatcher = setInterval(() => {
+                if (!currentFrame || closing) { stopExitWatcher(); return; }
+                try {
+                    const w = iframe.contentWindow;
+                    if (!w) return;
+                    const href = (w.location && w.location.href) || '';
+                    // URL rời khỏi main.html => chắc chắn không còn chạy
+                    if (href && !href.includes('main.html')) {
+                        handleGameExit('iframe rời main.html'); return;
+                    }
+                    // exit-screen / download-failure hiện => trạng thái kết thúc
+                    const doc = w.document;
+                    const es = doc && doc.getElementById('exit-screen');
+                    if (es && es.style && es.style.display === 'block') { handleGameExit('exit-screen'); return; }
+                    const df = doc && doc.getElementById('download-failure-dialog');
+                    // dialog "đang hiện" khi display !== 'none' (emulator set "" hoặc "block")
+                    if (df && df.style && df.style.display !== 'none') { handleGameExit('load lỗi'); return; }
+                } catch (e) { /* đang load -> bỏ qua */ }
+            }, 350);
+        }
+        function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
+
+        async function handleGameExit(reason) {
+            if (closing || !currentFrame) return;     // chỉ đóng 1 lần
+            closing = true;
+            stopExitWatcher(); stopAutosave();
+            console.log('[exit] đóng iframe, lý do:', reason);
+            const status = document.getElementById('saveStatus');
+            if (status) status.textContent = '💾 ' + reason + ', đang lưu...';
+            await exportSave(true);   // lưu lên server rồi dọn trình duyệt
             const modal = document.getElementById('emulatorModal');
             const frame = document.getElementById('emulatorFrame');
-
-            frame.src = 'about:blank';
             modal.style.display = 'none';
             currentFrame = null;
-
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
                 document.removeEventListener('keyup', keyListener);
                 keyListener = null;
             }
+            frame.src = 'about:blank';
+        }
+
+        // ==================== LƯU TRÊN SERVER (server là kho DUY NHẤT) ====================
+        // IndexedDB chỉ là "bộ nhớ chạy tạm" của emulator (bắt buộc, fs của J2ME đọc/ghi nó).
+        // SERVER mới là nơi lưu: mở game = tải từ server đè vào fs; đóng = đẩy fs lên server rồi XOÁ fs.
+        async function importSaveToIDB(saveObj) {
+            const db = await openFsDB();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction('fs4', 'readwrite');
+                tx.objectStore('fs4').clear();
+                let n = 0;
+                for (const pathname in saveObj) {
+                    const rec = saveObj[pathname];
+                    if (!rec) continue;
+                    if (!rec.isDir && Array.isArray(rec.data)) {
+                        try { rec.data = new Blob([new Int8Array(rec.data)]); } catch (e) {}
+                    }
+                    rec.pathname = pathname;
+                    tx.objectStore('fs4').put(rec);
+                    n++;
+                }
+                tx.oncomplete = () => { console.log('[save] nạp', n, 'mục từ server'); resolve(); };
+                tx.onerror = () => reject(tx.error);
+            });
+            db.close();
+        }
+
+        function openFsDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('asyncStorage', 4);
+                req.onupgradeneeded = (ev) => {
+                    const d = ev.target.result;
+                    if (!d.objectStoreNames.contains('fs4')) {
+                        const os = d.createObjectStore('fs4', { keyPath: 'pathname' });
+                        os.createIndex('parentDir', 'parentDir', { unique: false });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // Đọc trực tiếp IDB -> JSON text (data Blob -> Array số). Dùng được cả khi iframe đã thoát.
+        async function readIDBToText() {
+            let db;
+            try { db = await openFsDB(); } catch (e) { return '{}'; }
+            if (!db.objectStoreNames.contains('fs4')) { db.close(); return '{}'; }
+            const text = await new Promise((resolve) => {
+                const tx = db.transaction('fs4', 'readonly');
+                const allReq = tx.objectStore('fs4').getAll();
+                allReq.onsuccess = () => {
+                    const records = allReq.result || [];
+                    const obj = {}; let pending = 0, done = false;
+                    const finish = () => { if (pending === 0 && !done) { done = true; resolve(JSON.stringify(obj)); } };
+                    records.forEach(rec => {
+                        if (!rec || !rec.pathname) return;
+                        if (!rec.isDir && rec.data instanceof Blob) {
+                            pending++;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                rec.data = Array.prototype.slice.call(new Int8Array(reader.result));
+                                obj[rec.pathname] = rec; pending--; finish();
+                            };
+                            reader.onerror = () => { obj[rec.pathname] = rec; pending--; finish(); };
+                            reader.readAsArrayBuffer(rec.data);
+                        } else { obj[rec.pathname] = rec; }
+                    });
+                    finish();
+                };
+                allReq.onerror = () => resolve('{}');
+            });
+            db.close();
+            return text;
+        }
+
+        // Lấy save text: flush rồi ưu tiên exportStore của emulator; fallback đọc IDB trực tiếp.
+        async function getSaveText() {
+            const win = currentFrame && currentFrame.contentWindow;
+            try { if (win && win.myflushAll) win.myflushAll(); } catch (e) {}
+            if (win && win.fs && win.fs.exportStore) {
+                try {
+                    const blob = await new Promise((res) => win.fs.exportStore(res));
+                    if (blob && blob.size > 0) return await blob.text();
+                } catch (e) { console.warn('[save] exportStore lỗi -> đọc IDB', e.message); }
+            }
+            return await readIDBToText();
+        }
+
+        async function loadSaveFromServer() {
+            const status = document.getElementById('saveStatus');
+            try {
+                const res = await fetch('/api/load');
+                if (res.status === 404) { if (status) status.textContent = '🆕 game mới'; return; }
+                if (!res.ok) { if (status) status.textContent = '⚠ load lỗi'; return; }
+                const text = await res.text();
+                await importSaveToIDB(JSON.parse(text));
+                if (status) status.textContent = '📥 đã tải save';
+            } catch (e) {
+                console.warn('[save] tải lỗi:', e.message);
+                if (status) status.textContent = '⚠ tải lỗi';
+            }
+        }
+
+        // pushSave: đẩy fs lên server. wipe=true -> xoá fs trên trình duyệt (server-only).
+        async function pushSave(wipe) {
+            const status = document.getElementById('saveStatus');
+            const text = await getSaveText();
+            if (!text || text === '{}') { if (status) status.textContent = '⚠ chưa có dữ liệu'; return false; }
+            const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
+            const j = await r.json();
+            console.log('[save] đẩy server:', j);
+            if (wipe) { try { await clearIDB(); } catch (e) {} }   // server-only: không để lại trên trình duyệt
+            if (status) status.textContent = '✅ đã lưu (' + Math.round(j.size / 1024) + 'KB)';
+            return true;
+        }
+
+        async function clearIDB() {
+            const db = await openFsDB();
+            await new Promise((resolve) => {
+                const tx = db.transaction('fs4', 'readwrite');
+                tx.objectStore('fs4').clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => resolve();
+            });
+            db.close();
+            console.log('[save] đã xoá fs trên trình duyệt (chỉ giữ trên server)');
+        }
+
+        async function exportSave(finalWipe) {
+            const status = document.getElementById('saveStatus');
+            try {
+                if (status) status.textContent = '💾 đang lưu...';
+                await pushSave(!!finalWipe);
+            } catch (e) {
+                console.error('[save] lỗi:', e);
+                if (status) status.textContent = '⚠ lưu lỗi';
+            }
+        }
+
+        // Tự lưu lên server mỗi 8s khi đang chạy -> server luôn có bản mới (crash cũng không mất nhiều)
+        function startAutosave() {
+            stopAutosave();
+            autosaveTimer = setInterval(() => { if (currentFrame && !closing) exportSave(false); }, 8000);
+        }
+        function stopAutosave() { if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; } }
+
+        async function closeEmulator() {
+            if (closing || !currentFrame) return;
+            closing = true;
+            stopExitWatcher(); stopAutosave();
+            const status = document.getElementById('saveStatus');
+            if (status) status.textContent = '💾 đang lưu...';
+            await exportSave(true);          // lưu lên server + xoá trình duyệt
+            document.getElementById('emulatorModal').style.display = 'none';
+            const frame = document.getElementById('emulatorFrame');
+            currentFrame = null;
+            if (keyListener) {
+                document.removeEventListener('keydown', keyListener);
+                document.removeEventListener('keyup', keyListener);
+                keyListener = null;
+            }
+            frame.src = 'about:blank';
         }
 
         window.onload = () => {
             loadJars();
-
             document.getElementById('emulatorModal').onclick = function(e) {
                 if (e.target.id === 'emulatorModal') closeEmulator();
             };
-
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
-                    const modal = document.getElementById('emulatorModal');
-                    if (modal.style.display === 'flex') closeEmulator();
+                    if (document.getElementById('emulatorModal').style.display === 'flex') closeEmulator();
                 }
             });
         };

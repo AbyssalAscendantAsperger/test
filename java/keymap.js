@@ -1,38 +1,56 @@
 
-
 //----------------------keymap
+// BẢN ĐÃ SỬA cho test/letmecook
+// Thay đổi so với bản gốc:
+//  - Chuẩn hoá e.key về chữ thường trước khi switch (sửa lỗi Q/E chỉ chạy khi Shift).
+//  - Thêm WASD (w/a/s/d) -> -1/-3/-2/-4  (UP/LEFT/DOWN/RIGHT).
+//  - Thêm Space -> -5 (FIRE).
+//  - Thêm Z -> 122 (GAME_C=11), C -> 99 (GAME_D=12).
+//  - Giữ nguyên Q/E -> -6/-7 và mọi xử lý chuột/chạm, upload file của bản gốc.
 var keyDownTime_Star = 0
 
 function handleKeydown(e) {
     if (e.key != "EndCall" && e.key != "Backspace") {
-        //e.preventDefault();//清除默认行为（滚动屏幕等） 
-    } 
-    switch (e.key) {
-        case 'ArrowUp':
+        //e.preventDefault();//清除默认行为（滚动屏幕等）
+    }
+    // Chuẩn hoá: chữ cái 1 ký tự -> thường; các key đặc biệt (ArrowUp, SoftLeft...) giữ nguyên
+    var k = (e.key && e.key.length === 1) ? e.key.toLowerCase() : e.key;
+    switch (k) {
+        case 'arrowup':
+        case 'w':
             MIDP.sendKeyPress(-1);
             break;
-        case 'ArrowDown':
+        case 'arrowdown':
+        case 's':
             MIDP.sendKeyPress(-2);
             break;
-        case 'ArrowRight':
+        case 'arrowright':
+        case 'd':
             MIDP.sendKeyPress(-4);
             break;
-        case 'ArrowLeft':
+        case 'arrowleft':
+        case 'a':
             MIDP.sendKeyPress(-3);
             break;
-        case 'Enter':
+        case 'enter':
+        case ' ': // Space = FIRE
             MIDP.sendKeyPress(-5);
             break;
-        case 'Backspace':
-
+        case 'backspace':
             break;
-        case 'Q':
-        case 'SoftLeft':
+        case 'q':
+        case 'softleft':
             MIDP.sendKeyPress(-6);
             break;
-        case 'E':
-        case 'SoftRight':
+        case 'e':
+        case 'softright':
             MIDP.sendKeyPress(-7);
+            break;
+        case 'z':
+            MIDP.sendKeyPress(122); // GAME_C (gameKeys 122->11)
+            break;
+        case 'c':
+            MIDP.sendKeyPress(99);  // GAME_D (gameKeys 99->12)
             break;
         case '0':
             MIDP.sendKeyPress(48);
@@ -62,7 +80,7 @@ function handleKeydown(e) {
             }
             MIDP.sendKeyPress(42);
             break;
-        case '#': 
+        case '#':
             MIDP.sendKeyPress(35);
             break;
     }
@@ -71,34 +89,45 @@ function handleKeydown(e) {
 
 function handleKeyup(e) {
     if (e.key != "EndCall" && e.key != "Backspace") {
-        e.preventDefault();//清除默认行为（滚动屏幕等） 
+        e.preventDefault();//清除默认行为（滚动屏幕等）
     }
-    switch (e.key) {
-        case 'ArrowUp':
+    var k = (e.key && e.key.length === 1) ? e.key.toLowerCase() : e.key;
+    switch (k) {
+        case 'arrowup':
+        case 'w':
             MIDP.sendKeyRelease(-1);
             break;
-        case 'ArrowDown':
+        case 'arrowdown':
+        case 's':
             MIDP.sendKeyRelease(-2);
             break;
-        case 'ArrowRight':
+        case 'arrowright':
+        case 'd':
             MIDP.sendKeyRelease(-4);
             break;
-        case 'ArrowLeft':
+        case 'arrowleft':
+        case 'a':
             MIDP.sendKeyRelease(-3);
             break;
-        case 'Enter':
+        case 'enter':
+        case ' ': // Space
             MIDP.sendKeyRelease(-5);
             break;
-        case 'Backspace':
-
+        case 'backspace':
             break;
-        case 'Q':
-        case 'SoftLeft':
+        case 'q':
+        case 'softleft':
             MIDP.sendKeyRelease(-6);
             break;
-        case 'E':
-        case 'SoftRight':
+        case 'e':
+        case 'softright':
             MIDP.sendKeyRelease(-7);
+            break;
+        case 'z':
+            MIDP.sendKeyRelease(122);
+            break;
+        case 'c':
+            MIDP.sendKeyRelease(99);
             break;
         case '0':
             MIDP.sendKeyRelease(48);
@@ -149,10 +178,10 @@ EndEvent = SupportsTouches ? "touchend" : "mouseup";
 console.log(SupportsTouches,StartEvent,EndEvent);
 
 window.addEventListener(StartEvent, function (e) {
-    e = e || window.event; 
-    var button = e.srcElement || e.target; 
+    e = e || window.event;
+    var button = e.srcElement || e.target;
     var content = button.innerText;
-    
+
     switch (content) {
         case 'up':
             MIDP.sendKeyPress(-1);
@@ -168,10 +197,10 @@ window.addEventListener(StartEvent, function (e) {
             break;
         case 'OK':
             MIDP.sendKeyPress(-5);
-            break;  
+            break;
         case 'L':
             MIDP.sendKeyPress(-6);
-            break; 
+            break;
         case 'R':
             MIDP.sendKeyPress(-7);
             break;
@@ -203,7 +232,7 @@ window.addEventListener(StartEvent, function (e) {
             }
             MIDP.sendKeyPress(42);
             break;
-        case '#': 
+        case '#':
             MIDP.sendKeyPress(35);
             break;
     }
@@ -211,8 +240,8 @@ window.addEventListener(StartEvent, function (e) {
 });
 
 window.addEventListener(EndEvent, function (e) {
-    e = e || window.event;  
-    var button = e.srcElement || e.target; 
+    e = e || window.event;
+    var button = e.srcElement || e.target;
     var content = button.innerText;
     switch (content) {
         case 'up':
@@ -229,10 +258,10 @@ window.addEventListener(EndEvent, function (e) {
             break;
         case 'OK':
             MIDP.sendKeyRelease(-5);
-            break;  
+            break;
         case 'L':
             MIDP.sendKeyRelease(-6);
-            break; 
+            break;
         case 'R':
             MIDP.sendKeyRelease(-7);
             break;
@@ -285,5 +314,5 @@ const onUploadFile = function(e){
 };
 
 window.addEventListener("load", function(){
-    document.getElementById("File").addEventListener("change", onUploadFile); 
+    document.getElementById("File").addEventListener("change", onUploadFile);
 })
