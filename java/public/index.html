@@ -75,7 +75,7 @@
             overflow: hidden;
             box-shadow: 0 25px 70px rgba(0,0,0,0.95);
             border: 2px solid #222;
-            width: 244px;           /* Tổng chiều rộng */
+            width: 244px;
         }
         .modal-header {
             background: #1a1a2e;
@@ -91,8 +91,6 @@
             border: none;
             background: #000;
             display: block;
-            margin: 0;
-            padding: 0;
         }
         .modal-header h3 {
             margin: 0;
@@ -112,7 +110,6 @@
             border-radius: 50%;
             cursor: pointer;
             font-size: 12px;
-            line-height: 1;
         }
         .status {
             text-align: center;
@@ -209,86 +206,75 @@
                     setTimeout(() => {
                         setupKeyboardMapping(frame);
                         frame.focus();
-                    }, 1800);
+                    }, 2000);
                 }
             } catch (e) {
                 frame.srcdoc = `<h3 style="color:red;padding:30px">Lỗi kết nối</h3>`;
             }
         }
 
-        // === MAP BÀN PHÍM ĐÚNG CÁCH (dựa chính xác keymap.js gốc) ===
+        // ==================== MAP PHÍM MẠNH (Gửi cả key + keyCode + MIDP) ====================
         function setupKeyboardMapping(iframe) {
-            // Map phím → giá trị e.key mà emulator đang lắng nghe
             const keyMap = {
-                // Di chuyển
-                'w': 'ArrowUp',
-                'a': 'ArrowLeft',
-                's': 'ArrowDown',
-                'd': 'ArrowRight',
+                // WASD
+                'w': { key: 'ArrowUp',    code: -1 },
+                'a': { key: 'ArrowLeft',  code: -3 },
+                's': { key: 'ArrowDown',  code: -2 },
+                'd': { key: 'ArrowRight', code: -4 },
 
-                // Soft keys (Q/E)
-                'q': 'Q',
-                'e': 'E',
+                // Q/E
+                'q': { key: 'Q', code: -6 },
+                'e': { key: 'E', code: -7 },
 
-                // OK
-                ' ': 'Enter',
+                // Space
+                ' ': { key: 'Enter', code: -5 },
 
                 // Số
-                '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-                '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+                '0': { key: '0', code: 48 },
+                '1': { key: '1', code: 49 },
+                '2': { key: '2', code: 50 },
+                '3': { key: '3', code: 51 },
+                '4': { key: '4', code: 52 },
+                '5': { key: '5', code: 53 },
+                '6': { key: '6', code: 54 },
+                '7': { key: '7', code: 55 },
+                '8': { key: '8', code: 56 },
+                '9': { key: '9', code: 57 },
 
-                // * và #
-                '*': '*',
-                '#': '#'
+                // * #
+                '*': { key: '*', code: 42 },
+                '#': { key: '#', code: 35 }
             };
 
-            function sendKeyToEmulator(keyValue, isPress) {
+            function sendKey(mapped, isPress) {
                 try {
                     const win = iframe.contentWindow;
                     if (!win) return;
 
                     const eventType = isPress ? 'keydown' : 'keyup';
 
-                    // Tạo event giống hệt emulator gốc
+                    // Gửi event đầy đủ
                     const event = new KeyboardEvent(eventType, {
-                        key: keyValue,
+                        key: mapped.key,
+                        keyCode: mapped.code,
+                        which: mapped.code,
                         bubbles: true,
                         cancelable: true
                     });
 
-                    // Gửi event vào iframe
                     win.dispatchEvent(event);
 
-                    // Gọi trực tiếp hàm MIDP (cách emulator gốc xử lý)
+                    // Gọi trực tiếp MIDP (cách emulator gốc dùng)
                     if (win.MIDP) {
-                        const code = getMIDPCode(keyValue);
                         if (isPress && win.MIDP.sendKeyPress) {
-                            win.MIDP.sendKeyPress(code);
+                            win.MIDP.sendKeyPress(mapped.code);
                         } else if (!isPress && win.MIDP.sendKeyRelease) {
-                            win.MIDP.sendKeyRelease(code);
+                            win.MIDP.sendKeyRelease(mapped.code);
                         }
                     }
                 } catch (e) {}
             }
 
-            function getMIDPCode(key) {
-                const map = {
-                    'ArrowUp': -1,
-                    'ArrowDown': -2,
-                    'ArrowLeft': -3,
-                    'ArrowRight': -4,
-                    'Enter': -5,
-                    'Q': -6,
-                    'E': -7,
-                    '0': 48, '1': 49, '2': 50, '3': 51, '4': 52,
-                    '5': 53, '6': 54, '7': 55, '8': 56, '9': 57,
-                    '*': 42,
-                    '#': 35
-                };
-                return map[key] || 0;
-            }
-
-            // Xóa listener cũ
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
                 document.removeEventListener('keyup', keyListener);
@@ -296,16 +282,13 @@
 
             keyListener = function(e) {
                 if (!currentFrame) return;
-
                 const mapped = keyMap[e.key.toLowerCase()];
                 if (mapped) {
                     e.preventDefault();
-                    const isPress = e.type === 'keydown';
-                    sendKeyToEmulator(mapped, isPress);
-                    
+                    sendKey(mapped, e.type === 'keydown');
                     try {
-                        iframe.focus();
-                        iframe.contentWindow.focus();
+                        currentFrame.focus();
+                        currentFrame.contentWindow.focus();
                     } catch(e){}
                 }
             };
@@ -313,19 +296,18 @@
             document.addEventListener('keydown', keyListener);
             document.addEventListener('keyup', keyListener);
 
-            // Focus khi click/touch
-            iframe.ontouchstart = () => { try { iframe.contentWindow.focus(); } catch(e){} };
-            iframe.onclick = () => { try { iframe.contentWindow.focus(); } catch(e){} };
+            currentFrame.onclick = () => currentFrame.contentWindow.focus();
+            currentFrame.ontouchstart = () => currentFrame.contentWindow.focus();
         }
 
         function closeEmulator() {
             const modal = document.getElementById('emulatorModal');
             const frame = document.getElementById('emulatorFrame');
-            
+
             frame.src = 'about:blank';
             modal.style.display = 'none';
             currentFrame = null;
-            
+
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
                 document.removeEventListener('keyup', keyListener);
