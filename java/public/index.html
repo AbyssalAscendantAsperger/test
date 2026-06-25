@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J2ME Portal</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0f0f1a;
+            color: #ddd;
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #00d4ff;
+            margin: 0;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .jar-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 15px;
+        }
+        .jar-card {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid #333;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+        .jar-card:hover {
+            border-color: #00d4ff;
+            transform: translateY(-3px);
+        }
+        .jar-name {
+            font-weight: 600;
+            color: white;
+            margin-bottom: 6px;
+            word-break: break-all;
+            font-size: 13px;
+        }
+        .play-btn {
+            background: #00d4ff;
+            color: black;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 12px;
+            width: 100%;
+            cursor: pointer;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.96);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #111;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.95);
+            border: 2px solid #222;
+            width: 244px;           /* Tổng chiều rộng */
+        }
+        .modal-header {
+            background: #1a1a2e;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+        }
+        .emulator-frame {
+            width: 240px;
+            height: 320px;
+            border: none;
+            background: #000;
+            display: block;
+            margin: 0;
+            padding: 0;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: #00d4ff;
+            font-size: 10px;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .close-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00c853;
+            font-size: 14px;
+        }
+        .hint {
+            text-align: center;
+            font-size: 9px;
+            color: #555;
+            padding: 2px;
+            background: #1a1a2e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 J2ME Portal</h1>
+            <p style="color:#888">Chọn game để chơi</p>
+        </div>
+
+        <div id="status" class="status"></div>
+        
+        <div id="jarList" class="jar-list">
+            <div style="text-align:center;color:#666">Đang tải...</div>
+        </div>
+    </div>
+
+    <!-- Modal Emulator -->
+    <div id="emulatorModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Game</h3>
+                <button class="close-btn" onclick="closeEmulator()">×</button>
+            </div>
+            <iframe id="emulatorFrame" class="emulator-frame"></iframe>
+            <div class="hint">Nhấn vào màn hình • WASD + Space + Q/E</div>
+        </div>
+    </div>
+
+    <script>
+        let currentFrame = null;
+        let keyListener = null;
+
+        async function loadJars() {
+            const container = document.getElementById('jarList');
+            const status = document.getElementById('status');
+
+            try {
+                const res = await fetch('/api/jars');
+                const data = await res.json();
+
+                if (data.error || !data.jars?.length) {
+                    container.innerHTML = `<div style="color:#ff6b6b">Không tìm thấy file .jar</div>`;
+                    return;
+                }
+
+                status.innerHTML = `✅ Tìm thấy ${data.jars.length} game`;
+                container.innerHTML = '';
+
+                data.jars.forEach(jar => {
+                    const card = document.createElement('div');
+                    card.className = 'jar-card';
+                    card.innerHTML = `
+                        <div class="jar-name">${jar}</div>
+                        <button class="play-btn">▶ Chơi ngay</button>
+                    `;
+                    card.onclick = () => launchGame(jar);
+                    container.appendChild(card);
+                });
+            } catch (e) {
+                container.innerHTML = `<div style="color:#ff6b6b">Lỗi kết nối server</div>`;
+            }
+        }
+
+        async function launchGame(jarName) {
+            const modal = document.getElementById('emulatorModal');
+            const frame = document.getElementById('emulatorFrame');
+            const title = document.getElementById('modalTitle');
+
+            title.textContent = jarName;
+            modal.style.display = 'flex';
+            currentFrame = frame;
+
+            try {
+                const res = await fetch(`/api/launch?jar=${encodeURIComponent(jarName)}`);
+                const data = await res.json();
+
+                if (data.success) {
+                    frame.src = data.url;
+
+                    setTimeout(() => {
+                        setupKeyboardMapping(frame);
+                        frame.focus();
+                    }, 1800);
+                }
+            } catch (e) {
+                frame.srcdoc = `<h3 style="color:red;padding:30px">Lỗi kết nối</h3>`;
+            }
+        }
+
+        // === MAP BÀN PHÍM ĐÚNG CÁCH (dựa chính xác keymap.js gốc) ===
+        function setupKeyboardMapping(iframe) {
+            // Map phím → giá trị e.key mà emulator đang lắng nghe
+            const keyMap = {
+                // Di chuyển
+                'w': 'ArrowUp',
+                'a': 'ArrowLeft',
+                's': 'ArrowDown',
+                'd': 'ArrowRight',
+
+                // Soft keys (Q/E)
+                'q': 'Q',
+                'e': 'E',
+
+                // OK
+                ' ': 'Enter',
+
+                // Số
+                '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
+                '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+
+                // * và #
+                '*': '*',
+                '#': '#'
+            };
+
+            function sendKeyToEmulator(keyValue, isPress) {
+                try {
+                    const win = iframe.contentWindow;
+                    if (!win) return;
+
+                    const eventType = isPress ? 'keydown' : 'keyup';
+
+                    // Tạo event giống hệt emulator gốc
+                    const event = new KeyboardEvent(eventType, {
+                        key: keyValue,
+                        bubbles: true,
+                        cancelable: true
+                    });
+
+                    // Gửi event vào iframe
+                    win.dispatchEvent(event);
+
+                    // Gọi trực tiếp hàm MIDP (cách emulator gốc xử lý)
+                    if (win.MIDP) {
+                        const code = getMIDPCode(keyValue);
+                        if (isPress && win.MIDP.sendKeyPress) {
+                            win.MIDP.sendKeyPress(code);
+                        } else if (!isPress && win.MIDP.sendKeyRelease) {
+                            win.MIDP.sendKeyRelease(code);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            function getMIDPCode(key) {
+                const map = {
+                    'ArrowUp': -1,
+                    'ArrowDown': -2,
+                    'ArrowLeft': -3,
+                    'ArrowRight': -4,
+                    'Enter': -5,
+                    'Q': -6,
+                    'E': -7,
+                    '0': 48, '1': 49, '2': 50, '3': 51, '4': 52,
+                    '5': 53, '6': 54, '7': 55, '8': 56, '9': 57,
+                    '*': 42,
+                    '#': 35
+                };
+                return map[key] || 0;
+            }
+
+            // Xóa listener cũ
+            if (keyListener) {
+                document.removeEventListener('keydown', keyListener);
+                document.removeEventListener('keyup', keyListener);
+            }
+
+            keyListener = function(e) {
+                if (!currentFrame) return;
+
+                const mapped = keyMap[e.key.toLowerCase()];
+                if (mapped) {
+                    e.preventDefault();
+                    const isPress = e.type === 'keydown';
+                    sendKeyToEmulator(mapped, isPress);
+                    
+                    try {
+                        iframe.focus();
+                        iframe.contentWindow.focus();
+                    } catch(e){}
+                }
+            };
+
+            document.addEventListener('keydown', keyListener);
+            document.addEventListener('keyup', keyListener);
+
+            // Focus khi click/touch
+            iframe.ontouchstart = () => { try { iframe.contentWindow.focus(); } catch(e){} };
+            iframe.onclick = () => { try { iframe.contentWindow.focus(); } catch(e){} };
+        }
+
+        function closeEmulator() {
+            const modal = document.getElementById('emulatorModal');
+            const frame = document.getElementById('emulatorFrame');
+            
+            frame.src = 'about:blank';
+            modal.style.display = 'none';
+            currentFrame = null;
+            
+            if (keyListener) {
+                document.removeEventListener('keydown', keyListener);
+                document.removeEventListener('keyup', keyListener);
+                keyListener = null;
+            }
+        }
+
+        window.onload = () => {
+            loadJars();
+
+            document.getElementById('emulatorModal').onclick = function(e) {
+                if (e.target.id === 'emulatorModal') closeEmulator();
+            };
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('emulatorModal');
+                    if (modal.style.display === 'flex') closeEmulator();
+                }
+            });
+        };
+    </script>
+</body>
+</html>

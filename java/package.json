@@ -1,0 +1,12 @@
+{
+  "name": "j2me-portal",
+  "version": "1.0.0",
+  "description": "J2ME Portal - Quét JAR và chạy bằng iframe emulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
