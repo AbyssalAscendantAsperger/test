@@ -30,36 +30,44 @@
             background: #00d4ff; color: black; border: none; padding: 8px 16px;
             border-radius: 6px; font-weight: bold; margin-top: 12px; width: 100%; cursor: pointer;
         }
+        .res-row { margin-top: 10px; font-size: 13px; color: #aaa; }
+        .res-row select {
+            background: #1a1a2e; color: #00d4ff; border: 1px solid #333;
+            border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer;
+        }
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.96); z-index: 9999; justify-content: center; align-items: center;
         }
+        /* modal-content không cố định cỡ nữa: JS tự co vừa canvas (co transform nếu quá to) */
         .modal-content {
             background: #111; border-radius: 6px; overflow: hidden;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.95); border: 2px solid #222; width: 244px;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.95); border: 2px solid #222;
+            transform-origin: center center;
         }
         .modal-header {
             background: #1a1a2e; padding: 4px 8px; display: flex;
-            justify-content: space-between; align-items: center; font-size: 10px;
+            justify-content: space-between; align-items: center; font-size: 10px; gap: 4px;
         }
+        /* iframe: JS set width/height = đúng canvas native. Default 240x320 làm dự phòng. */
         .emulator-frame { width: 240px; height: 320px; border: none; background: #000; display: block; }
         .modal-header h3 {
-            margin: 0; color: #00d4ff; font-size: 10px; max-width: 120px;
+            margin: 0; color: #00d4ff; font-size: 10px; max-width: 110px;
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .close-btn {
             background: #ff4757; color: white; border: none; width: 18px; height: 18px;
-            border-radius: 50%; cursor: pointer; font-size: 12px;
+            border-radius: 50%; cursor: pointer; font-size: 12px; flex: 0 0 auto;
         }
         .status { text-align: center; margin-bottom: 20px; color: #00c853; font-size: 14px; }
         .hint { text-align: center; font-size: 9px; color: #555; padding: 2px; background: #1a1a2e; }
         .save-status {
-            color: #00c853; font-size: 9px; margin-left: auto; margin-right: 6px;
-            max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: #00c853; font-size: 9px; margin-left: auto; margin-right: 2px;
+            max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .save-btn {
             background: #2d4a2d; color: #6cff6c; border: none; width: 18px; height: 18px;
-            border-radius: 50%; cursor: pointer; font-size: 10px; margin-right: 4px;
+            border-radius: 50%; cursor: pointer; font-size: 10px; flex: 0 0 auto;
         }
         .save-btn:hover { background: #3a6b3a; }
     </style>
@@ -69,6 +77,17 @@
         <div class="header">
             <h1>🎮 J2ME Portal</h1>
             <p style="color:#888">Chọn game để chơi</p>
+            <div class="res-row">
+                Độ phân giải màn hình:
+                <select id="resSelect" title="Chọn độ phân giải của máy ảo">
+                    <option value="size-240x320" selected>240×320 (dọc — mặc định)</option>
+                    <option value="size-320x240">320×240 (ngang)</option>
+                    <option value="size-360x640">360×640 (dọc)</option>
+                    <option value="size-640x360">640×360 (ngang)</option>
+                    <option value="size-176x220">176×220 (nhỏ)</option>
+                    <option value="size-352x416">352×416</option>
+                </select>
+            </div>
         </div>
         <div id="status" class="status"></div>
         <div id="jarList" class="jar-list">
@@ -78,11 +97,11 @@
 
     <!-- Modal Emulator -->
     <div id="emulatorModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" id="modalContent">
             <div class="modal-header">
                 <h3 id="modalTitle">Game</h3>
                 <span id="saveStatus" class="save-status">💾 sẵn sàng</span>
-                <button class="save-btn" title="Lưu ngay lên server" onclick="exportSave()">💾</button>
+                <button class="save-btn" title="Lưu ngay lên server" onclick="exportSave(false)">💾</button>
                 <button class="close-btn" onclick="closeEmulator()">×</button>
             </div>
             <iframe id="emulatorFrame" class="emulator-frame"></iframe>
@@ -95,7 +114,8 @@
         let keyListener = null;
         let exitWatcher = null;
         let autosaveTimer = null;
-        let closing = false;   // chống đóng/lưu 2 lần
+        let autofitTimer = null;
+        let closing = false;
 
         async function loadJars() {
             const container = document.getElementById('jarList');
@@ -126,29 +146,69 @@
             const frame = document.getElementById('emulatorFrame');
             const title = document.getElementById('modalTitle');
             const status = document.getElementById('saveStatus');
+            const res = document.getElementById('resSelect').value;   // size-WxH
             title.textContent = jarName;
             modal.style.display = 'flex';
             currentFrame = frame;
             closing = false;
             if (status) status.textContent = '⏳ đang tải save...';
             try {
-                // 1) SERVER LÀ NGUỒN DUY NHẤT: tải save từ server -> nạp vào fs trước khi load
                 await loadSaveFromServer();
-                // 2) load emulator
-                const res = await fetch(`/api/launch?jar=${encodeURIComponent(jarName)}`);
-                const data = await res.json();
+                const r = await fetch(`/api/launch?jar=${encodeURIComponent(jarName)}`);
+                const data = await r.json();
                 if (data.success) {
-                    frame.src = data.url;
+                    // Truyền độ phân giải qua canvasSize -> emulator set canvas đúng cỡ
+                    frame.src = data.url + '&canvasSize=' + encodeURIComponent(res);
                     setTimeout(() => {
                         setupKeyboardMapping(frame);
-                        hookExit(frame);      // CHẶN thoát của game + bật watcher
-                        startAutosave();      // tự lưu lên server định kỳ
+                        hookExit(frame);
+                        startAutosave();
+                        startAutoFit();     // co iframe vừa canvas
                         frame.focus();
                     }, 2000);
                 }
             } catch (e) {
                 frame.srcdoc = `<h3 style="color:red;padding:30px">Lỗi kết nối</h3>`;
             }
+        }
+
+        // ==================== AUTO-FIT: co iframe vừa khít với canvas của game ====================
+        // Đọc <canvas id="canvas"> thật trong iframe (cùng origin -> truy cập được),
+        // lấy width/height native -> set iframe đúng cỡ. Nếu quá to so với màn trình duyệt
+        // thì thu nhỏ bằng CSS transform (giữ tỉ lệ, native resolution vẫn nguyên).
+        function startAutoFit() {
+            stopAutoFit();
+            autofitTimer = setInterval(() => {
+                if (!currentFrame || closing) { stopAutoFit(); return; }
+                fitFrame();
+            }, 400);
+        }
+        function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+
+        function fitFrame() {
+            const frame = document.getElementById('emulatorFrame');
+            const modalContent = document.getElementById('modalContent');
+            try {
+                const win = frame.contentWindow;
+                const doc = win && win.document;
+                if (!doc) return;
+                const canvas = doc.getElementById('canvas');
+                if (!canvas) return;
+                const cw = canvas.width, ch = canvas.height;
+                if (!cw || !ch || (cw === frame._fitW && ch === frame._fitH)) return; // không đổi -> bỏ qua
+                frame._fitW = cw; frame._fitH = ch;
+                // Kích thước tối đa hiển thị (trừ chrome)
+                const maxW = window.innerWidth - 24;
+                const maxH = window.innerHeight - 70;
+                const scale = Math.min(1, maxW / cw, maxH / ch);
+                // iframe đúng native; modal-content co vừa để bao lấy iframe
+                frame.style.width = cw + 'px';
+                frame.style.height = ch + 'px';
+                modalContent.style.width = cw + 'px';
+                // Thu nhỏ toàn khối nếu cần (transform, giữ tỉ lệ)
+                modalContent.style.transform = scale < 1 ? `scale(${scale})` : 'none';
+                console.log('[fit] canvas', cw + 'x' + ch, 'scale', scale.toFixed(2));
+            } catch (e) { /* đang load -> bỏ qua */ }
         }
 
         // ==================== MAP PHÍM (gửi thẳng MIDP, cùng origin) ====================
@@ -186,16 +246,11 @@
             currentFrame.ontouchstart = () => currentFrame.contentWindow.focus();
         }
 
-        // ==================== CHẶN THOÁT GAME + PHÁT HIỆN KHÔNG CHẠY ====================
-        // Ý tưởng: game thoát luôn đi qua showExitScreen() (global). Override nó ->
-        // chặn ngay TRƯỚC khi iframe navigate sang index.html -> không bao giờ lộ trang 8080.
-        // Kèm watcher dự phòng cho crash cứng (game chết mà không qua showExitScreen).
+        // ==================== CHẶN THOÁT + PHÁT HIỆN KHÔNG CHẠY ====================
         function hookExit(iframe) {
             let win;
             try { win = iframe.contentWindow; } catch (e) { return; }
             if (!win) return;
-
-            // (A) CHỦ ĐỘNG: chặn hàm thoát của emulator
             if (typeof win.showExitScreen === 'function') {
                 win.showExitScreen = function() {
                     try { if (win.myflushAll) win.myflushAll(); } catch (e) {}
@@ -204,8 +259,6 @@
                 };
                 console.log('[exit] đã cài hook showExitScreen');
             }
-
-            // (B) DỰ PHÒNG: watcher phát hiện "không còn chạy"
             stopExitWatcher();
             exitWatcher = setInterval(() => {
                 if (!currentFrame || closing) { stopExitWatcher(); return; }
@@ -213,33 +266,30 @@
                     const w = iframe.contentWindow;
                     if (!w) return;
                     const href = (w.location && w.location.href) || '';
-                    // URL rời khỏi main.html => chắc chắn không còn chạy
-                    if (href && !href.includes('main.html')) {
-                        handleGameExit('iframe rời main.html'); return;
-                    }
-                    // exit-screen / download-failure hiện => trạng thái kết thúc
+                    if (href && !href.includes('main.html')) { handleGameExit('iframe rời main.html'); return; }
                     const doc = w.document;
                     const es = doc && doc.getElementById('exit-screen');
                     if (es && es.style && es.style.display === 'block') { handleGameExit('exit-screen'); return; }
                     const df = doc && doc.getElementById('download-failure-dialog');
-                    // dialog "đang hiện" khi display !== 'none' (emulator set "" hoặc "block")
                     if (df && df.style && df.style.display !== 'none') { handleGameExit('load lỗi'); return; }
-                } catch (e) { /* đang load -> bỏ qua */ }
+                } catch (e) { /* đang load */ }
             }, 350);
         }
         function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
 
         async function handleGameExit(reason) {
-            if (closing || !currentFrame) return;     // chỉ đóng 1 lần
+            if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave();
+            stopExitWatcher(); stopAutosave(); stopAutoFit();
             console.log('[exit] đóng iframe, lý do:', reason);
             const status = document.getElementById('saveStatus');
             if (status) status.textContent = '💾 ' + reason + ', đang lưu...';
-            await exportSave(true);   // lưu lên server rồi dọn trình duyệt
+            await exportSave(true);
             const modal = document.getElementById('emulatorModal');
             const frame = document.getElementById('emulatorFrame');
+            const modalContent = document.getElementById('modalContent');
             modal.style.display = 'none';
+            modalContent.style.transform = 'none';      // reset co giãn
             currentFrame = null;
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
@@ -250,8 +300,20 @@
         }
 
         // ==================== LƯU TRÊN SERVER (server là kho DUY NHẤT) ====================
-        // IndexedDB chỉ là "bộ nhớ chạy tạm" của emulator (bắt buộc, fs của J2ME đọc/ghi nó).
-        // SERVER mới là nơi lưu: mở game = tải từ server đè vào fs; đóng = đẩy fs lên server rồi XOÁ fs.
+        function openFsDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('asyncStorage', 4);
+                req.onupgradeneeded = (ev) => {
+                    const d = ev.target.result;
+                    if (!d.objectStoreNames.contains('fs4')) {
+                        const os = d.createObjectStore('fs4', { keyPath: 'pathname' });
+                        os.createIndex('parentDir', 'parentDir', { unique: false });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
         async function importSaveToIDB(saveObj) {
             const db = await openFsDB();
             await new Promise((resolve, reject) => {
@@ -273,23 +335,6 @@
             });
             db.close();
         }
-
-        function openFsDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open('asyncStorage', 4);
-                req.onupgradeneeded = (ev) => {
-                    const d = ev.target.result;
-                    if (!d.objectStoreNames.contains('fs4')) {
-                        const os = d.createObjectStore('fs4', { keyPath: 'pathname' });
-                        os.createIndex('parentDir', 'parentDir', { unique: false });
-                    }
-                };
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        }
-
-        // Đọc trực tiếp IDB -> JSON text (data Blob -> Array số). Dùng được cả khi iframe đã thoát.
         async function readIDBToText() {
             let db;
             try { db = await openFsDB(); } catch (e) { return '{}'; }
@@ -321,8 +366,6 @@
             db.close();
             return text;
         }
-
-        // Lấy save text: flush rồi ưu tiên exportStore của emulator; fallback đọc IDB trực tiếp.
         async function getSaveText() {
             const win = currentFrame && currentFrame.contentWindow;
             try { if (win && win.myflushAll) win.myflushAll(); } catch (e) {}
@@ -334,7 +377,6 @@
             }
             return await readIDBToText();
         }
-
         async function loadSaveFromServer() {
             const status = document.getElementById('saveStatus');
             try {
@@ -349,8 +391,6 @@
                 if (status) status.textContent = '⚠ tải lỗi';
             }
         }
-
-        // pushSave: đẩy fs lên server. wipe=true -> xoá fs trên trình duyệt (server-only).
         async function pushSave(wipe) {
             const status = document.getElementById('saveStatus');
             const text = await getSaveText();
@@ -358,11 +398,10 @@
             const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
             const j = await r.json();
             console.log('[save] đẩy server:', j);
-            if (wipe) { try { await clearIDB(); } catch (e) {} }   // server-only: không để lại trên trình duyệt
+            if (wipe) { try { await clearIDB(); } catch (e) {} }
             if (status) status.textContent = '✅ đã lưu (' + Math.round(j.size / 1024) + 'KB)';
             return true;
         }
-
         async function clearIDB() {
             const db = await openFsDB();
             await new Promise((resolve) => {
@@ -372,9 +411,8 @@
                 tx.onerror = () => resolve();
             });
             db.close();
-            console.log('[save] đã xoá fs trên trình duyệt (chỉ giữ trên server)');
+            console.log('[save] đã xoá fs trên trình duyệt (server-only)');
         }
-
         async function exportSave(finalWipe) {
             const status = document.getElementById('saveStatus');
             try {
@@ -385,8 +423,6 @@
                 if (status) status.textContent = '⚠ lưu lỗi';
             }
         }
-
-        // Tự lưu lên server mỗi 8s khi đang chạy -> server luôn có bản mới (crash cũng không mất nhiều)
         function startAutosave() {
             stopAutosave();
             autosaveTimer = setInterval(() => { if (currentFrame && !closing) exportSave(false); }, 8000);
@@ -396,11 +432,13 @@
         async function closeEmulator() {
             if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave();
+            stopExitWatcher(); stopAutosave(); stopAutoFit();
             const status = document.getElementById('saveStatus');
             if (status) status.textContent = '💾 đang lưu...';
-            await exportSave(true);          // lưu lên server + xoá trình duyệt
+            await exportSave(true);
+            const modalContent = document.getElementById('modalContent');
             document.getElementById('emulatorModal').style.display = 'none';
+            modalContent.style.transform = 'none';
             const frame = document.getElementById('emulatorFrame');
             currentFrame = null;
             if (keyListener) {
@@ -410,6 +448,18 @@
             }
             frame.src = 'about:blank';
         }
+
+        // Khi user đổi độ phân giải trong lúc modal đang mở: áp dụng ngay
+        document.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('resSelect');
+            if (sel) sel.addEventListener('change', () => {
+                if (currentFrame && !closing) {
+                    const res = sel.value;
+                    currentFrame.src = currentFrame.src.split('&canvasSize=')[0] + '&canvasSize=' + encodeURIComponent(res);
+                    startAutoFit();
+                }
+            });
+        });
 
         window.onload = () => {
             loadJars();
