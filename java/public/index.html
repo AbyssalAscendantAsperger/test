@@ -23,23 +23,30 @@
         .jar-card {
             background: #1a1a2e; border-radius: 12px; padding: 18px;
             border: 1px solid #333; transition: 0.2s; cursor: pointer;
+            display: flex; gap: 12px; align-items: flex-start;
         }
         .jar-card:hover { border-color: #00d4ff; transform: translateY(-3px); }
-        .jar-name { font-weight: 600; color: white; margin-bottom: 6px; word-break: break-all; font-size: 13px; }
+        .game-icon {
+            width: 48px; height: 48px; flex: 0 0 48px;
+            object-fit: contain; border-radius: 8px;
+            background: #0f0f1a; image-rendering: pixelated;
+        }
+        .game-icon-placeholder {
+            width: 48px; height: 48px; flex: 0 0 48px; border-radius: 8px;
+            background: #0f0f1a; display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+        .game-info { flex: 1; min-width: 0; }
+        .jar-name { font-weight: 600; color: white; margin-bottom: 2px; word-break: break-all; font-size: 13px; }
+        .game-res { font-size: 9px; color: #555; margin-bottom: 6px; }
         .play-btn {
             background: #00d4ff; color: black; border: none; padding: 8px 16px;
-            border-radius: 6px; font-weight: bold; margin-top: 12px; width: 100%; cursor: pointer;
-        }
-        .res-row { margin-top: 10px; font-size: 13px; color: #aaa; }
-        .res-row select {
-            background: #1a1a2e; color: #00d4ff; border: 1px solid #333;
-            border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer;
+            border-radius: 6px; font-weight: bold; margin-top: 6px; width: 100%; cursor: pointer;
         }
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.96); z-index: 9999; justify-content: center; align-items: center;
         }
-        /* modal-content không cố định cỡ nữa: JS tự co vừa canvas (co transform nếu quá to) */
         .modal-content {
             background: #111; border-radius: 6px; overflow: hidden;
             box-shadow: 0 25px 70px rgba(0,0,0,0.95); border: 2px solid #222;
@@ -49,7 +56,6 @@
             background: #1a1a2e; padding: 4px 8px; display: flex;
             justify-content: space-between; align-items: center; font-size: 10px; gap: 4px;
         }
-        /* iframe: JS set width/height = đúng canvas native. Default 240x320 làm dự phòng. */
         .emulator-frame { width: 240px; height: 320px; border: none; background: #000; display: block; }
         .modal-header h3 {
             margin: 0; color: #00d4ff; font-size: 10px; max-width: 110px;
@@ -70,6 +76,11 @@
             border-radius: 50%; cursor: pointer; font-size: 10px; flex: 0 0 auto;
         }
         .save-btn:hover { background: #3a6b3a; }
+        .rotate-btn {
+            background: #2d3a4a; color: #7cc4ff; border: none; width: 18px; height: 18px;
+            border-radius: 50%; cursor: pointer; font-size: 10px; flex: 0 0 auto;
+        }
+        .rotate-btn:hover { background: #3a4f6a; }
     </style>
 </head>
 <body>
@@ -77,17 +88,6 @@
         <div class="header">
             <h1>🎮 J2ME Portal</h1>
             <p style="color:#888">Chọn game để chơi</p>
-            <div class="res-row">
-                Độ phân giải màn hình:
-                <select id="resSelect" title="Chọn độ phân giải của máy ảo">
-                    <option value="size-240x320" selected>240×320 (dọc — mặc định)</option>
-                    <option value="size-320x240">320×240 (ngang)</option>
-                    <option value="size-360x640">360×640 (dọc)</option>
-                    <option value="size-640x360">640×360 (ngang)</option>
-                    <option value="size-176x220">176×220 (nhỏ)</option>
-                    <option value="size-352x416">352×416</option>
-                </select>
-            </div>
         </div>
         <div id="status" class="status"></div>
         <div id="jarList" class="jar-list">
@@ -102,6 +102,7 @@
                 <h3 id="modalTitle">Game</h3>
                 <span id="saveStatus" class="save-status">💾 sẵn sàng</span>
                 <button class="save-btn" title="Lưu ngay lên server" onclick="exportSave(false)">💾</button>
+                <button class="rotate-btn" title="Xoay màn hình" onclick="rotateGame()">↻</button>
                 <button class="close-btn" onclick="closeEmulator()">×</button>
             </div>
             <iframe id="emulatorFrame" class="emulator-frame"></iframe>
@@ -124,20 +125,28 @@
                 const res = await fetch('/api/jars');
                 const data = await res.json();
                 if (data.error || !data.games?.length) {
-                    container.innerHTML = `<div style="color:#ff6b6b">Không tìm thấy game</div>`;
+                    container.innerHTML = '<div style="color:#ff6b6b">Không tìm thấy game</div>';
                     return;
                 }
-                status.innerHTML = `✅ Tìm thấy ${data.games.length} game`;
+                status.innerHTML = '✅ Tìm thấy ' + data.games.length + ' game';
                 container.innerHTML = '';
                 data.games.forEach(game => {
                     const card = document.createElement('div');
                     card.className = 'jar-card';
-                    card.innerHTML = `<div class="jar-name">${game.name}</div><button class="play-btn">▶ Chơi ngay</button>`;
+                    let iconHtml = '';
+                    if (game.hasIcon) {
+                        iconHtml = '<img class="game-icon" src="/api/icon/' + game.id + '" alt="" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">';
+                    } else {
+                        iconHtml = '<div class="game-icon-placeholder">🎮</div>';
+                    }
+                    const r = game.resolution;
+                    const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + '</div>' : '';
+                    card.innerHTML = iconHtml + '<div class="game-info"><div class="jar-name">' + game.name + '</div>' + resBadge + '<button class="play-btn">▶ Chơi ngay</button></div>';
                     card.onclick = () => launchGame(game.id, game.name);
                     container.appendChild(card);
                 });
             } catch (e) {
-                container.innerHTML = `<div style="color:#ff6b6b">Lỗi kết nối server</div>`;
+                container.innerHTML = '<div style="color:#ff6b6b">Lỗi kết nối server</div>';
             }
         }
 
@@ -146,36 +155,36 @@
             const frame = document.getElementById('emulatorFrame');
             const title = document.getElementById('modalTitle');
             const status = document.getElementById('saveStatus');
-            const res = document.getElementById('resSelect').value;   // size-WxH
             title.textContent = gameName || 'Game';
             modal.style.display = 'flex';
             currentFrame = frame;
+            currentGameId = gameId;
+            autoRotateTried = false;
             closing = false;
             if (status) status.textContent = '⏳ đang tải save...';
             try {
                 await loadSaveFromServer();
-                const r = await fetch(`/api/launch?id=${encodeURIComponent(gameId)}`);
+                const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId));
                 const data = await r.json();
                 if (data.success) {
-                    // Truyền độ phân giải qua canvasSize -> emulator set canvas đúng cỡ
-                    frame.src = data.url + '&canvasSize=' + encodeURIComponent(res);
+                    // URL đã chứa canvasSize tự động từ server -> dùng trực tiếp
+                    frame.src = data.url;
                     setTimeout(() => {
                         setupKeyboardMapping(frame);
                         hookExit(frame);
                         startAutosave();
-                        startAutoFit();     // co iframe vừa canvas
+                        startAutoFit();
                         frame.focus();
                     }, 2000);
+                    startAutoRotate();
+                } else if (data.error) {
+                    frame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>';
                 }
             } catch (e) {
-                frame.srcdoc = `<h3 style="color:red;padding:30px">Lỗi kết nối</h3>`;
+                frame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi kết nối</h3>';
             }
         }
 
-        // ==================== AUTO-FIT: co iframe vừa khít với canvas của game ====================
-        // Đọc <canvas id="canvas"> thật trong iframe (cùng origin -> truy cập được),
-        // lấy width/height native -> set iframe đúng cỡ. Nếu quá to so với màn trình duyệt
-        // thì thu nhỏ bằng CSS transform (giữ tỉ lệ, native resolution vẫn nguyên).
         function startAutoFit() {
             stopAutoFit();
             autofitTimer = setInterval(() => {
@@ -195,23 +204,85 @@
                 const canvas = doc.getElementById('canvas');
                 if (!canvas) return;
                 const cw = canvas.width, ch = canvas.height;
-                if (!cw || !ch || (cw === frame._fitW && ch === frame._fitH)) return; // không đổi -> bỏ qua
+                if (!cw || !ch || (cw === frame._fitW && ch === frame._fitH)) return;
                 frame._fitW = cw; frame._fitH = ch;
-                // Kích thước tối đa hiển thị (trừ chrome)
                 const maxW = window.innerWidth - 24;
                 const maxH = window.innerHeight - 70;
                 const scale = Math.min(1, maxW / cw, maxH / ch);
-                // iframe đúng native; modal-content co vừa để bao lấy iframe
                 frame.style.width = cw + 'px';
                 frame.style.height = ch + 'px';
                 modalContent.style.width = cw + 'px';
-                // Thu nhỏ toàn khối nếu cần (transform, giữ tỉ lệ)
-                modalContent.style.transform = scale < 1 ? `scale(${scale})` : 'none';
-                console.log('[fit] canvas', cw + 'x' + ch, 'scale', scale.toFixed(2));
-            } catch (e) { /* đang load -> bỏ qua */ }
+                modalContent.style.transform = scale < 1 ? 'scale(' + scale + ')' : 'none';
+            } catch (e) {}
         }
 
-        // ==================== MAP PHÍM (gửi thẳng MIDP, cùng origin) ====================
+        let autoRotateTried = false;
+        let autoRotateTimer = null;
+        let autoRotateAttempts = 0;
+        let currentGameId = null;
+
+        // ==================== XOAY MÀN HÌNH + TỰ PHÁT HIỆN HƯỚNG ====================
+        function rotateGame() {
+            if (!currentFrame || closing) return;
+            const oldSrc = currentFrame.src;
+            const m = oldSrc.match(/canvasSize=size-(\d+)x(\d+)/);
+            if (!m) return;
+            const newRes = 'size-' + m[2] + 'x' + m[1];
+            currentFrame.src = oldSrc.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=' + newRes);
+            autoRotateTried = true;
+            stopAutoRotate();
+            startAutoFit();
+        }
+
+        // Polling mỗi 1 giây: chỉ xoay khi game đã render nội dung thật (canvas không còn trống)
+        function startAutoRotate() {
+            stopAutoRotate();
+            autoRotateAttempts = 0;
+            autoRotateTimer = setInterval(() => {
+                if (!currentFrame || closing) { stopAutoRotate(); return; }
+                autoRotateAttempts++;
+                if (autoRotateAttempts > 10) { stopAutoRotate(); return; }
+                autoDetectOrientation();
+            }, 1000);
+        }
+        function stopAutoRotate() {
+            if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; }
+        }
+
+        // Scan pixel: trả true khi đã thấy nội dung (dừng polling), false khi canvas còn trống
+        function autoDetectOrientation() {
+            if (autoRotateTried || !currentFrame || closing) return true;
+            try {
+                const win = currentFrame.contentWindow;
+                const doc = win && win.document;
+                if (!doc) return false;
+                const canvas = doc.getElementById('canvas');
+                if (!canvas || !canvas.width || !canvas.height) return false;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return false;
+                const w = canvas.width, h = canvas.height;
+                const halfW = Math.floor(w / 2), halfH = Math.floor(h / 2);
+                let q = [0, 0, 0, 0], total = 0;
+                for (let y = 0; y < h; y += 2) {
+                    for (let x = 0; x < w; x += 2) {
+                        const data = ctx.getImageData(x, y, 1, 1).data;
+                        const r = data[0], g = data[1], b = data[2];
+                        const isBg = (r < 8 && g < 8 && b < 8) || (r > 247 && g > 247 && b > 247);
+                        if (!isBg) { q[(x < halfW ? 0 : 1) + (y < halfH ? 0 : 2)]++; total++; }
+                    }
+                }
+                if (total < 50) return false; // canvas còn trống -> đợi lần sau
+                const ratio = total / ((w / 2) * (h / 2));
+                if (ratio < 0.55) {
+                    const topC = q[0] + q[1], botC = q[2] + q[3];
+                    const leftC = q[0] + q[2], rightC = q[1] + q[3];
+                    if (h > w && topC > 0 && botC < topC * 0.25) { rotateGame(); return true; }
+                    if (w > h && leftC > 0 && rightC < leftC * 0.25) { rotateGame(); return true; }
+                }
+                return true;
+            } catch (e) { return false; }
+        }
+
         function setupKeyboardMapping(iframe) {
             const keyMap = {
                 'w': { code: -1 }, 'a': { code: -3 }, 's': { code: -2 }, 'd': { code: -4 },
@@ -229,7 +300,7 @@
                     if (!win || !win.MIDP) return;
                     if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(mapped.code);
                     else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(mapped.code);
-                } catch (e) { console.error('[Portal] sendKey:', e.message); }
+                } catch (e) {}
             }
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
@@ -246,7 +317,6 @@
             currentFrame.ontouchstart = () => currentFrame.contentWindow.focus();
         }
 
-        // ==================== CHẶN THOÁT + PHÁT HIỆN KHÔNG CHẠY ====================
         function hookExit(iframe) {
             let win;
             try { win = iframe.contentWindow; } catch (e) { return; }
@@ -254,10 +324,8 @@
             if (typeof win.showExitScreen === 'function') {
                 win.showExitScreen = function() {
                     try { if (win.myflushAll) win.myflushAll(); } catch (e) {}
-                    console.log('[exit] showExitScreen bị chặn -> đóng modal ngay');
                     handleGameExit('game thoát');
                 };
-                console.log('[exit] đã cài hook showExitScreen');
             }
             stopExitWatcher();
             exitWatcher = setInterval(() => {
@@ -272,7 +340,7 @@
                     if (es && es.style && es.style.display === 'block') { handleGameExit('exit-screen'); return; }
                     const df = doc && doc.getElementById('download-failure-dialog');
                     if (df && df.style && df.style.display !== 'none') { handleGameExit('load lỗi'); return; }
-                } catch (e) { /* đang load */ }
+                } catch (e) {}
             }, 350);
         }
         function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
@@ -280,16 +348,13 @@
         async function handleGameExit(reason) {
             if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave(); stopAutoFit();
-            console.log('[exit] đóng iframe, lý do:', reason);
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
             const status = document.getElementById('saveStatus');
             if (status) status.textContent = '💾 ' + reason + ', đang lưu...';
             await exportSave(true);
-            const modal = document.getElementById('emulatorModal');
+            document.getElementById('emulatorModal').style.display = 'none';
+            document.getElementById('modalContent').style.transform = 'none';
             const frame = document.getElementById('emulatorFrame');
-            const modalContent = document.getElementById('modalContent');
-            modal.style.display = 'none';
-            modalContent.style.transform = 'none';      // reset co giãn
             currentFrame = null;
             if (keyListener) {
                 document.removeEventListener('keydown', keyListener);
@@ -299,7 +364,6 @@
             frame.src = 'about:blank';
         }
 
-        // ==================== LƯU TRÊN SERVER (server là kho DUY NHẤT) ====================
         function openFsDB() {
             return new Promise((resolve, reject) => {
                 const req = indexedDB.open('asyncStorage', 4);
@@ -319,7 +383,6 @@
             await new Promise((resolve, reject) => {
                 const tx = db.transaction('fs4', 'readwrite');
                 tx.objectStore('fs4').clear();
-                let n = 0;
                 for (const pathname in saveObj) {
                     const rec = saveObj[pathname];
                     if (!rec) continue;
@@ -328,9 +391,8 @@
                     }
                     rec.pathname = pathname;
                     tx.objectStore('fs4').put(rec);
-                    n++;
                 }
-                tx.oncomplete = () => { console.log('[save] nạp', n, 'mục từ server'); resolve(); };
+                tx.oncomplete = () => resolve();
                 tx.onerror = () => reject(tx.error);
             });
             db.close();
@@ -373,7 +435,7 @@
                 try {
                     const blob = await new Promise((res) => win.fs.exportStore(res));
                     if (blob && blob.size > 0) return await blob.text();
-                } catch (e) { console.warn('[save] exportStore lỗi -> đọc IDB', e.message); }
+                } catch (e) {}
             }
             return await readIDBToText();
         }
@@ -387,7 +449,6 @@
                 await importSaveToIDB(JSON.parse(text));
                 if (status) status.textContent = '📥 đã tải save';
             } catch (e) {
-                console.warn('[save] tải lỗi:', e.message);
                 if (status) status.textContent = '⚠ tải lỗi';
             }
         }
@@ -397,7 +458,6 @@
             if (!text || text === '{}') { if (status) status.textContent = '⚠ chưa có dữ liệu'; return false; }
             const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
             const j = await r.json();
-            console.log('[save] đẩy server:', j);
             if (wipe) { try { await clearIDB(); } catch (e) {} }
             if (status) status.textContent = '✅ đã lưu (' + Math.round(j.size / 1024) + 'KB)';
             return true;
@@ -411,7 +471,6 @@
                 tx.onerror = () => resolve();
             });
             db.close();
-            console.log('[save] đã xoá fs trên trình duyệt (server-only)');
         }
         async function exportSave(finalWipe) {
             const status = document.getElementById('saveStatus');
@@ -419,7 +478,6 @@
                 if (status) status.textContent = '💾 đang lưu...';
                 await pushSave(!!finalWipe);
             } catch (e) {
-                console.error('[save] lỗi:', e);
                 if (status) status.textContent = '⚠ lưu lỗi';
             }
         }
@@ -432,13 +490,12 @@
         async function closeEmulator() {
             if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave(); stopAutoFit();
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
             const status = document.getElementById('saveStatus');
             if (status) status.textContent = '💾 đang lưu...';
             await exportSave(true);
-            const modalContent = document.getElementById('modalContent');
             document.getElementById('emulatorModal').style.display = 'none';
-            modalContent.style.transform = 'none';
+            document.getElementById('modalContent').style.transform = 'none';
             const frame = document.getElementById('emulatorFrame');
             currentFrame = null;
             if (keyListener) {
@@ -448,18 +505,6 @@
             }
             frame.src = 'about:blank';
         }
-
-        // Khi user đổi độ phân giải trong lúc modal đang mở: áp dụng ngay
-        document.addEventListener('DOMContentLoaded', () => {
-            const sel = document.getElementById('resSelect');
-            if (sel) sel.addEventListener('change', () => {
-                if (currentFrame && !closing) {
-                    const res = sel.value;
-                    currentFrame.src = currentFrame.src.split('&canvasSize=')[0] + '&canvasSize=' + encodeURIComponent(res);
-                    startAutoFit();
-                }
-            });
-        });
 
         window.onload = () => {
             loadJars();
