@@ -177,12 +177,18 @@ EndEvent = SupportsTouches ? "touchend" : "mouseup";
 
 console.log(SupportsTouches,StartEvent,EndEvent);
 
+function isGamepadButton(el) {
+    return el && (el.tagName === 'BUTTON' || (el.closest && el.closest('#gamepad')));
+}
+
 window.addEventListener(StartEvent, function (e) {
     e = e || window.event;
     var button = e.srcElement || e.target;
     var content = button.innerText;
-    // Visual press effect
-    try { button.classList.add('pressed'); button.style.transform = 'scale(0.93)'; } catch(ex) {}
+    // Visual press effect: chỉ cho nút bàn phím ảo, KHÔNG cho vùng màn hình game
+    if (isGamepadButton(button)) {
+        try { button.classList.add('pressed'); button.style.transform = 'scale(0.93)'; } catch(ex) {}
+    }
 
     switch (content) {
         case 'up':
@@ -251,8 +257,10 @@ window.addEventListener(EndEvent, function (e) {
     e = e || window.event;
     var button = e.srcElement || e.target;
     var content = button.innerText;
-    // Visual release effect
-    try { button.classList.remove('pressed'); button.style.transform = ''; } catch(ex) {}
+    // Visual release effect: chỉ cho nút bàn phím ảo, KHÔNG cho vùng màn hình game
+    if (isGamepadButton(button)) {
+        try { button.classList.remove('pressed'); button.style.transform = ''; } catch(ex) {}
+    }
     switch (content) {
         case 'up':
             MIDP.sendKeyRelease(-1);

@@ -67,7 +67,11 @@
         /* iframe: nằm trong screen-frame, scale bằng transform-origin top-left */
         .emulator-frame {
             display: block; border: none; transform-origin: top left; background: #000;
+            outline: none; -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
         }
+        .emulator-frame:focus { outline: none; }
+        .screen-frame, .screen-area { outline: none; -webkit-tap-highlight-color: transparent; }
 
         /* ===== VIRTUAL GAMEPAD — Fluid vw-based ===== */
         .gamepad {
@@ -234,7 +238,7 @@
         <div class="modal-header">
             <h3 id="modalTitle">Game</h3>
             <span id="saveStatus" class="save-status">💾</span>
-            <button class="hdr-btn save-btn" title="Lưu" onclick="exportSave(false)">💾</button>
+            <button class="hdr-btn save-btn" title="Lưu" onclick="exportSave(currentFrame && currentFrame.contentWindow, currentGameId, false)">💾</button>
             <button class="hdr-btn rotate-btn" title="Xoay" onclick="rotateGame()">↻</button>
             <button class="hdr-btn pad-btn" id="padToggle" title="Bàn phím" onclick="toggleGamepad()">📱</button>
             <button class="hdr-btn fs-btn" title="Toàn màn hình" onclick="toggleFullscreen()">⛶</button>
@@ -304,7 +308,9 @@
     </div>
 
     <script>
-        let currentFrame = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, closing = false, gamepadVisible = false, isFullscreen = false;
+        let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null;
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+        function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
 
         function filterGames(q) {
             q = q.toLowerCase().trim();
@@ -338,18 +344,40 @@
         }
 
         async function launchGame(gameId, gameName) {
+            // Nếu đang có save của game cũ chạy nền, đợi tối đa 2.5 giây để tránh xung đột IDB
+            if (pendingSavePromise) {
+                try { await withTimeout(pendingSavePromise, 2500); } catch(e) {}
+                pendingSavePromise = null;
+            }
+            // Nếu đang đóng game cũ, đợi đóng xong
+            if (closing) {
+                let wait = 0;
+                while (closing && wait < 2500) { await sleep(50); wait += 50; }
+            }
+
             document.getElementById('modalTitle').textContent = gameName || 'Game';
             document.getElementById('gameView').classList.add('visible');
             currentFrame = document.getElementById('emulatorFrame');
+            currentGameId = gameId;
             closing = false;
+            gameReady = false;
             document.getElementById('saveStatus').textContent = '⏳';
             try {
-                await loadSaveFromServer();
+                await loadSaveFromServer(gameId);
                 const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId));
                 const data = await r.json();
                 if (data.success) {
                     currentFrame.src = data.url;
-                    setTimeout(() => { setupKeyboardMapping(currentFrame); hookExit(currentFrame); startAutosave(); startAutoFit(); startAutoRotate(); currentFrame.focus(); }, 2000);
+                    currentFrame.onload = () => {
+                        if (!currentFrame) return;
+                        setupKeyboardMapping(currentFrame);
+                        hookExit(currentFrame);
+                        startAutosave();
+                        startAutoFit();
+                        startAutoRotate();
+                        gameReady = true;
+                        currentFrame.focus();
+                    };
                     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) showGamepad();
                 } else if (data.error) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>'; }
             } catch (e) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi</h3>'; }
@@ -376,7 +404,7 @@
         function sendKeyRaw(code, isPress) {
             try {
                 const win = currentFrame && currentFrame.contentWindow;
-                if (!win || !win.MIDP) return;
+                if (!win || !win.MIDP || !gameReady) return;
                 if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(code);
                 else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(code);
             } catch (e) {}
@@ -399,10 +427,11 @@
             if (!currentFrame || closing) return;
             const m = currentFrame.src.match(/canvasSize=size-(\d+)x(\d+)/);
             if (!m) return;
+            gameReady = false;
             currentFrame.src = currentFrame.src.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=size-' + m[2] + 'x' + m[1]);
             stopAutoRotate(); startAutoFit();
             // Restart auto-rotate after iframe reloads
-            setTimeout(() => { startAutoRotate(); }, 3000);
+            setTimeout(() => { gameReady = true; startAutoRotate(); }, 3000);
         }
         function startAutoRotate() { stopAutoRotate(); autoRotateTimer = setInterval(() => { if (!currentFrame || closing) { stopAutoRotate(); return; } autoDetectOrientation(); }, 2000); }
         function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
@@ -493,38 +522,95 @@
         }
         function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
         async function handleGameExit(reason) {
-            if (closing || !currentFrame) return; closing = true;
+            if (closing || !currentFrame) return;
+            closing = true;
             stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
-            document.getElementById('saveStatus').textContent = '💾 ' + reason;
-            // Force-kill iframe NGAY LẬP TỨC (trước khi save)
+            const win = currentFrame.contentWindow;
             const frame = currentFrame;
-            try { frame.src = 'about:blank'; } catch(e) {}
-            await exportSave(true);
+            const gameId = currentGameId;
+            currentFrame = null;
+            currentGameId = null;
+            gameReady = false;
+            document.getElementById('saveStatus').textContent = '💾 ' + reason;
+            // Đóng UI ngay lập tức, không để người dùng kẹt ở màn hình đen
             document.getElementById('gameView').classList.remove('visible');
             if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
-            hideGamepad(); currentFrame = null;
+            hideGamepad();
             if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
+            // Lưu bất đồng bộ trong nền (có giới hạn thời gian) rồi dọn iframe
+            pendingSavePromise = exportSave(win, gameId, true);
+            try { await withTimeout(pendingSavePromise, 2000); } catch(e) {}
+            pendingSavePromise = null;
+            try { frame.src = 'about:blank'; } catch(e) {}
+            closing = false;
         }
 
         function openFsDB() { return new Promise((resolve, reject) => { const req = indexedDB.open('asyncStorage', 4); req.onupgradeneeded = (ev) => { const d = ev.target.result; if (!d.objectStoreNames.contains('fs4')) { const os = d.createObjectStore('fs4', { keyPath: 'pathname' }); os.createIndex('parentDir', 'parentDir', { unique: false }); } }; req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); }
         async function importSaveToIDB(saveObj) { const db = await openFsDB(); await new Promise((resolve, reject) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); for (const p in saveObj) { const r = saveObj[p]; if (!r) continue; if (!r.isDir && Array.isArray(r.data)) { try { r.data = new Blob([new Int8Array(r.data)]); } catch(e){} } r.pathname = p; tx.objectStore('fs4').put(r); } tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); }
         async function readIDBToText() { let db; try { db = await openFsDB(); } catch(e) { return '{}'; } if (!db.objectStoreNames.contains('fs4')) { db.close(); return '{}'; } const text = await new Promise((resolve) => { const tx = db.transaction('fs4', 'readonly'); const rq = tx.objectStore('fs4').getAll(); rq.onsuccess = () => { const recs = rq.result || []; const obj = {}; let pending = 0, done = false; const finish = () => { if (pending === 0 && !done) { done = true; resolve(JSON.stringify(obj)); } }; recs.forEach(rec => { if (!rec || !rec.pathname) return; if (!rec.isDir && rec.data instanceof Blob) { pending++; const reader = new FileReader(); reader.onload = () => { rec.data = Array.prototype.slice.call(new Int8Array(reader.result)); obj[rec.pathname] = rec; pending--; finish(); }; reader.onerror = () => { obj[rec.pathname] = rec; pending--; finish(); }; reader.readAsArrayBuffer(rec.data); } else { obj[rec.pathname] = rec; } }); finish(); }; rq.onerror = () => resolve('{}'); }); db.close(); return text; }
-        async function getSaveText() { const win = currentFrame && currentFrame.contentWindow; try { if (win && win.myflushAll) win.myflushAll(); } catch(e) {} if (win && win.fs && win.fs.exportStore) { try { const blob = await new Promise((res) => win.fs.exportStore(res)); if (blob && blob.size > 0) return await blob.text(); } catch(e) {} } return await readIDBToText(); }
-        async function loadSaveFromServer() { const status = document.getElementById('saveStatus'); try { const res = await fetch('/api/load'); if (res.status === 404) { if (status) status.textContent = '🆕'; return; } if (!res.ok) return; await importSaveToIDB(JSON.parse(await res.text())); if (status) status.textContent = '📥'; } catch(e) {} }
-        async function exportSave(finalWipe) { const status = document.getElementById('saveStatus'); try { if (status) status.textContent = '💾...'; const text = await getSaveText(); if (!text || text === '{}') { if (status) status.textContent = '⚠'; return; } const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text }); const j = await r.json(); if (finalWipe) { try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {} } if (status) status.textContent = '✅'; } catch(e) { if (status) status.textContent = '⚠'; } }
-        function startAutosave() { stopAutosave(); autosaveTimer = setInterval(() => { if (currentFrame && !closing) exportSave(false); }, 8000); }
+        async function getSaveText(win) {
+            win = win || (currentFrame && currentFrame.contentWindow);
+            try { if (win && win.myflushAll) win.myflushAll(); } catch(e) {}
+            if (win && win.fs && win.fs.exportStore) {
+                try {
+                    const blob = await withTimeout(new Promise((res, rej) => {
+                        try { win.fs.exportStore(res); } catch(err) { rej(err); }
+                    }), 1500);
+                    if (blob && blob !== 'TIMEOUT' && blob.size > 0) return await blob.text();
+                } catch(e) {}
+            }
+            return await withTimeout(readIDBToText(), 1500);
+        }
+        async function loadSaveFromServer(gameId) {
+            const status = document.getElementById('saveStatus');
+            try {
+                const res = await fetch('/api/load?gameId=' + encodeURIComponent(gameId));
+                if (res.status === 404) { if (status) status.textContent = '🆕'; return; }
+                if (!res.ok) return;
+                // Xóa IDB cũ trước khi import save của game mới, tránh lẫn save giữa các game
+                try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {}
+                await importSaveToIDB(JSON.parse(await res.text()));
+                if (status) status.textContent = '📥';
+            } catch(e) {}
+        }
+        async function exportSave(win, gameId, finalWipe) {
+            const status = document.getElementById('saveStatus');
+            try {
+                if (status) status.textContent = '💾...';
+                const text = await getSaveText(win);
+                if (!text || text === 'TIMEOUT' || text === '{}') { if (status) status.textContent = '⚠'; return; }
+                const r = await withTimeout(fetch('/api/save?gameId=' + encodeURIComponent(gameId), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text }), 1500);
+                if (r === 'TIMEOUT') { if (status) status.textContent = '⚠'; return; }
+                await r.json();
+                if (finalWipe) { try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {} }
+                if (status) status.textContent = '✅';
+            } catch(e) { if (status) status.textContent = '⚠'; }
+        }
+        function startAutosave() { stopAutosave(); autosaveTimer = setInterval(() => { if (currentFrame && !closing && currentGameId) exportSave(currentFrame.contentWindow, currentGameId, false); }, 8000); }
         function stopAutosave() { if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; } }
 
         async function closeEmulator() {
-            if (closing || !currentFrame) return; closing = true;
+            if (closing || !currentFrame) return;
+            closing = true;
             stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
+            const win = currentFrame.contentWindow;
+            const frame = currentFrame;
+            const gameId = currentGameId;
+            currentFrame = null;
+            currentGameId = null;
+            gameReady = false;
             document.getElementById('saveStatus').textContent = '💾...';
-            await exportSave(true);
+            // Đóng UI ngay lập tức, không để người dùng kẹt ở màn hình đen
             document.getElementById('gameView').classList.remove('visible');
             if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
-            hideGamepad(); currentFrame = null;
+            hideGamepad();
             if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
-            document.getElementById('emulatorFrame').src = 'about:blank';
+            // Lưu bất đồng bộ trong nền (có giới hạn thời gian) rồi dọn iframe
+            pendingSavePromise = exportSave(win, gameId, true);
+            try { await withTimeout(pendingSavePromise, 2000); } catch(e) {}
+            pendingSavePromise = null;
+            try { frame.src = 'about:blank'; } catch(e) {}
+            closing = false;
         }
 
         window.addEventListener('DOMContentLoaded', () => {

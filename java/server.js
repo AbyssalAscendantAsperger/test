@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // === CẤU HÌNH ĐƯỜNG DẪN ===
 const JAVA_DIR = path.join(__dirname, '..', 'java');   // Thư mục emulator gốc
@@ -160,11 +160,15 @@ function extractResolution(fileName) {
 
 // 1) Registry: ánh xạ gameId mờ -> { file thật, icon, resolution }
 const gameRegistry = new Map();
+let lastJarChecksum = '';
+
 function buildGameRegistry() {
   if (!fs.existsSync(JAR_DIR)) return;
-  const files = fs.readdirSync(JAR_DIR).filter(f => f.toLowerCase().endsWith('.jar'));
-  files.forEach((file, idx) => {
-    const gameId = 'g' + crypto.createHash('sha1').update(file + ':' + idx).digest('hex').slice(0, 14);
+  const files = fs.readdirSync(JAR_DIR).filter(f => f.toLowerCase().endsWith('.jar') && !/^classes(\d+|old)?\.jar$/i.test(f));
+  gameRegistry.clear();
+  files.forEach((file) => {
+    // gameId ổn định theo tên file, không phụ thuộc vào thứ tự/số lượng file
+    const gameId = 'g' + crypto.createHash('sha1').update(file).digest('hex').slice(0, 14);
     const name = file.replace(/\.jar$/i, '').replace(/[_-]+/g, ' ').trim();
     const fullPath = path.join(JAR_DIR, file);
     let icon = null;
@@ -173,7 +177,35 @@ function buildGameRegistry() {
     gameRegistry.set(gameId, { name, file, fullPath, icon, resolution });
   });
 }
+
+// Tính checksum nhanh của thư mục jar (số lượng + tổng size + tổng mtime)
+// để phát hiện thêm/xóa/đổi tên/overwrite file mà không cần restart server.
+function getJarChecksum() {
+  try {
+    const files = fs.readdirSync(JAR_DIR).filter(f => f.toLowerCase().endsWith('.jar') && !/^classes(\d+|old)?\.jar$/i.test(f)).sort();
+    let totalSize = 0;
+    let totalMtime = 0;
+    for (const f of files) {
+      const st = fs.statSync(path.join(JAR_DIR, f));
+      totalSize += st.size;
+      totalMtime += st.mtimeMs;
+    }
+    return `${files.length}:${totalSize}:${totalMtime}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function rebuildGameRegistryIfNeeded() {
+  const checksum = getJarChecksum();
+  if (checksum !== lastJarChecksum) {
+    buildGameRegistry();
+    lastJarChecksum = checksum;
+  }
+}
+
 buildGameRegistry();
+lastJarChecksum = getJarChecksum();
 
 // 2) RATE LIMITING: chống spam /api/launch
 // Giới hạn mỗi session (sid) tối đa 10 lần launch / phút
@@ -249,6 +281,7 @@ app.use('/api/save', express.text({ type: 'text/plain', limit: '200mb' }));
 // API: Lấy danh sách game (trả gameId, tên, icon, resolution)
 app.get('/api/jars', (req, res) => {
   try {
+    rebuildGameRegistryIfNeeded(); // cập nhật nếu có game mới/xóa
     const games = [...gameRegistry.entries()].map(([id, g]) => ({
       id, name: g.name, hasIcon: !!g.icon, resolution: g.resolution
     }));
@@ -273,6 +306,7 @@ app.get('/api/launch', (req, res) => {
   if (!rateLimitCheck(req.sid)) {
     return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
   }
+  rebuildGameRegistryIfNeeded(); // cập nhật nếu có game mới/xóa trước khi tìm
   const { id } = req.query;
   const game = gameRegistry.get(id);
   if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
@@ -283,23 +317,34 @@ app.get('/api/launch', (req, res) => {
   res.json({ success: true, url: emulatorUrl, resolution: r });
 });
 
-// API: Tải save của phiên/user hiện tại
+// API: Tải save của 1 game trong phiên/user hiện tại
 app.get('/api/load', (req, res) => {
   const sid = req.sid;
-  const file = path.join(SAVES_DIR, sid + '.fs');
+  const gameId = req.query.gameId;
+  if (!gameId || !/^[A-Za-z0-9_-]{1,64}$/.test(gameId)) {
+    return res.status(400).json({ error: 'gameId không hợp lệ' });
+  }
+  const userDir = path.join(SAVES_DIR, sid);
+  const file = path.join(userDir, gameId + '.fs');
   if (!fs.existsSync(file)) return res.status(404).json({ nosave: true });
   const text = fs.readFileSync(file, 'utf8');
   res.type('text/plain').send(text);
 });
 
-// API: Lưu save của phiên/user hiện tại
+// API: Lưu save của 1 game trong phiên/user hiện tại
 app.post('/api/save', (req, res) => {
   const sid = req.sid;
+  const gameId = req.query.gameId;
+  if (!gameId || !/^[A-Za-z0-9_-]{1,64}$/.test(gameId)) {
+    return res.status(400).json({ error: 'gameId không hợp lệ' });
+  }
   const body = req.body || '';
   if (typeof body !== 'string') return res.status(400).json({ error: 'body phải là text' });
-  const file = path.join(SAVES_DIR, sid + '.fs');
+  const userDir = path.join(SAVES_DIR, sid);
+  fs.mkdirSync(userDir, { recursive: true });
+  const file = path.join(userDir, gameId + '.fs');
   fs.writeFileSync(file, body);
-  res.json({ ok: true, sid, size: Buffer.byteLength(body) });
+  res.json({ ok: true, sid, gameId, size: Buffer.byteLength(body) });
 });
 
 // Trang chính
@@ -311,6 +356,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ J2ME Portal đang chạy tại http://localhost:${PORT}`);
   console.log(`🔒 Anti-leak: ${gameRegistry.size} game đã đăng ký (tên file được ẩn)`);
-  console.log(`💾 Save theo phiên/user tại: ${SAVES_DIR}`);
+  console.log(`💾 Save theo game và phiên tại: ${SAVES_DIR}`);
   console.log(`🚀 Chỉ cần gõ: npm start`);
 });
