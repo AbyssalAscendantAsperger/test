@@ -123,17 +123,17 @@
             try {
                 const res = await fetch('/api/jars');
                 const data = await res.json();
-                if (data.error || !data.jars?.length) {
-                    container.innerHTML = `<div style="color:#ff6b6b">Không tìm thấy file .jar</div>`;
+                if (data.error || !data.games?.length) {
+                    container.innerHTML = `<div style="color:#ff6b6b">Không tìm thấy game</div>`;
                     return;
                 }
-                status.innerHTML = `✅ Tìm thấy ${data.jars.length} game`;
+                status.innerHTML = `✅ Tìm thấy ${data.games.length} game`;
                 container.innerHTML = '';
-                data.jars.forEach(jar => {
+                data.games.forEach(game => {
                     const card = document.createElement('div');
                     card.className = 'jar-card';
-                    card.innerHTML = `<div class="jar-name">${jar}</div><button class="play-btn">▶ Chơi ngay</button>`;
-                    card.onclick = () => launchGame(jar);
+                    card.innerHTML = `<div class="jar-name">${game.name}</div><button class="play-btn">▶ Chơi ngay</button>`;
+                    card.onclick = () => launchGame(game.id, game.name);
                     container.appendChild(card);
                 });
             } catch (e) {
@@ -141,20 +141,20 @@
             }
         }
 
-        async function launchGame(jarName) {
+        async function launchGame(gameId, gameName) {
             const modal = document.getElementById('emulatorModal');
             const frame = document.getElementById('emulatorFrame');
             const title = document.getElementById('modalTitle');
             const status = document.getElementById('saveStatus');
             const res = document.getElementById('resSelect').value;   // size-WxH
-            title.textContent = jarName;
+            title.textContent = gameName || 'Game';
             modal.style.display = 'flex';
             currentFrame = frame;
             closing = false;
             if (status) status.textContent = '⏳ đang tải save...';
             try {
                 await loadSaveFromServer();
-                const r = await fetch(`/api/launch?jar=${encodeURIComponent(jarName)}`);
+                const r = await fetch(`/api/launch?id=${encodeURIComponent(gameId)}`);
                 const data = await r.json();
                 if (data.success) {
                     // Truyền độ phân giải qua canvasSize -> emulator set canvas đúng cỡ
