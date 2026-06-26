@@ -181,6 +181,8 @@ window.addEventListener(StartEvent, function (e) {
     e = e || window.event;
     var button = e.srcElement || e.target;
     var content = button.innerText;
+    // Visual press effect
+    try { button.classList.add('pressed'); button.style.transform = 'scale(0.93)'; } catch(ex) {}
 
     switch (content) {
         case 'up':
@@ -203,6 +205,12 @@ window.addEventListener(StartEvent, function (e) {
             break;
         case 'R':
             MIDP.sendKeyPress(-7);
+            break;
+        case 'C':
+            MIDP.sendKeyPress(122);
+            break;
+        case 'D':
+            MIDP.sendKeyPress(99);
             break;
         case '0':
             MIDP.sendKeyPress(48);
@@ -243,6 +251,8 @@ window.addEventListener(EndEvent, function (e) {
     e = e || window.event;
     var button = e.srcElement || e.target;
     var content = button.innerText;
+    // Visual release effect
+    try { button.classList.remove('pressed'); button.style.transform = ''; } catch(ex) {}
     switch (content) {
         case 'up':
             MIDP.sendKeyRelease(-1);
@@ -264,6 +274,12 @@ window.addEventListener(EndEvent, function (e) {
             break;
         case 'R':
             MIDP.sendKeyRelease(-7);
+            break;
+        case 'C':
+            MIDP.sendKeyRelease(122);
+            break;
+        case 'D':
+            MIDP.sendKeyRelease(99);
             break;
         case '0':
             MIDP.sendKeyRelease(48);

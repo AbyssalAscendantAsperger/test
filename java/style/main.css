@@ -198,164 +198,126 @@ button {
 .log-item-warn:before { content: 'W'; padding-right: 1rem; font-weight: bold; }
 .log-item-error:before { content: 'E'; padding-right: 1rem; font-weight: bold; }
 
-.gamepad-1 { 
-  display: block;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  margin:0 auto;
-  width: 240px;   
-  z-index: 103;
-  -moz-user-select: none; 
-  -o-user-select:none; 
-  -khtml-user-select:none; 
-  -webkit-user-select:none; 
-  -ms-user-select:none; 
-  user-select:none;
-} 
-.gamepad-1 #padcontent{
-  z-index: 103;
-  width: 240px; 
-  float: left;
-}
-.gamepad-1 #padcontent div{
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 36px;
-  width: 36px;
+/* ===== NOKIA 3310 GAMEPAD — main.html ===== */
+#gamepad {
+  background: #111;
+  border-top: 2px solid #222;
+  padding: 8px 0 10px;
+  display: flex; flex-direction: column; align-items: center;
+  -moz-user-select: none; -webkit-user-select: none; user-select: none;
 }
 
-.gamepad-1 button {   
-  display: block;
-  opacity: 0.5;
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 36px;
-  width: 36px;
-} 
-
-
-.gamepad-2 { 
-  display: block;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  margin:0 auto;
-  width: 320px;   
-  z-index: 103;
-  -moz-user-select: none; 
-  -o-user-select:none; 
-  -khtml-user-select:none; 
-  -webkit-user-select:none; 
-  -ms-user-select:none; 
-  user-select:none;
-} 
-.gamepad-2 #padcontent{
-  z-index: 103;
-  width: 320px; 
-  float: left;
-}
-.gamepad-2 #padcontent div{
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 48px;
-  width: 48px;
+#gamepad #padcontent {
+  display: flex; justify-content: center; gap: 4px;
+  margin: 2px 0; float: none; width: auto;
 }
 
-.gamepad-2 button {   
-  display: block;
-  opacity: 0.5;
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 48px;
-  width: 48px;
-} 
-
-
-.gamepad-3 { 
-  display: block;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  margin:0 auto;
-  width: 460px;   
-  z-index: 103;
-  -moz-user-select: none; 
-  -o-user-select:none; 
-  -khtml-user-select:none; 
-  -webkit-user-select:none; 
-  -ms-user-select:none; 
-  user-select:none;
-} 
-.gamepad-3 #padcontent{
-  z-index: 103;
-  width: 460px; 
-  float: left;
-}
-.gamepad-3 #padcontent div{
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 60px;
-  width: 60px;
+#gamepad #padcontent div {
+  visibility: hidden; margin: 0; float: none;
 }
 
-.gamepad-3 button {   
-  display: block;
-  opacity: 0.5;
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 60px;
-  width: 60px;
-} 
-
-
-.gamepad-4 { 
-  display: block;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  margin:0 auto;
-  width: 580px;   
-  z-index: 103;
-  -moz-user-select: none; 
-  -o-user-select:none; 
-  -khtml-user-select:none; 
-  -webkit-user-select:none; 
-  -ms-user-select:none; 
-  user-select:none;
-} 
-.gamepad-4 #padcontent{
-  z-index: 103;
-  width: 580px; 
-  float: left;
-}
-.gamepad-4 #padcontent div{
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 72px;
-  width: 72px;
+#gamepad button {
+  display: flex; align-items: center; justify-content: center;
+  margin: 0; float: none; touch-action: none; cursor: pointer;
+  font-weight: 700; letter-spacing: 0.5px;
+  transition: all 0.06s ease;
 }
 
-.gamepad-4 button {   
-  display: block;
-  opacity: 0.5;
-  margin: 1px 1px 1px 1px;
-  float: left;
-  z-index: 103;
-  height: 72px;
-  width: 72px;
-} 
+/* ─── Soft keys row (L C D R) ─── */
+#gamepad #padcontent:first-child button {
+  border-radius: 15px;
+  background: linear-gradient(180deg, #252525, #1a1a1a);
+  color: #8a8a9a; border: 1px solid #333;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+#gamepad #padcontent:first-child button:active {
+  background: linear-gradient(180deg, #1a1a1a, #282828);
+  transform: scale(0.92);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 2px 6px rgba(0,0,0,0.5);
+  color: #bbb;
+}
+
+/* ─── D-pad buttons (up, left/OK/right, down) ─── */
+#gamepad #padcontent:nth-child(2) button,
+#gamepad #padcontent:nth-child(3) button,
+#gamepad #padcontent:nth-child(4) button {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #222, #181818);
+  color: #6a8abb; border: 1.5px solid #333;
+  font-size: 16px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+#gamepad #padcontent:nth-child(3) button:nth-child(2) {
+  border-radius: 16px;
+  background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
+  color: #7acc9a; border: 2px solid #3a3a3a;
+  font-size: 13px; font-weight: 800;
+}
+#gamepad #padcontent:nth-child(2) button:active,
+#gamepad #padcontent:nth-child(3) button:active,
+#gamepad #padcontent:nth-child(4) button:active {
+  background: linear-gradient(180deg, #181818, #2a2a2a);
+  transform: scale(0.93);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.9), inset 0 4px 8px rgba(0,0,0,0.5);
+  color: #a0d0ff;
+}
+#gamepad #padcontent:nth-child(3) button:nth-child(2):active {
+  color: #90ffc8;
+}
+
+/* ─── Numpad buttons ─── */
+#gamepad #padcontent:nth-child(n+5) button {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #222, #161616);
+  color: #c8c8d0; border: 1px solid #333;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+#gamepad #padcontent:nth-child(n+5) button:active {
+  background: linear-gradient(180deg, #1a1a1a, #2a2a2a);
+  transform: scale(0.93);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 3px 6px rgba(0,0,0,0.5);
+  color: #fff;
+}
+
+/* ===== Gamepad Size Variants ===== */
+.gamepad-1 {
+  display: block; position: fixed;
+  left: 0; right: 0; bottom: 0;
+  margin: 0 auto; width: 140px; z-index: 103;
+}
+.gamepad-1 button { height: 26px; width: 26px; font-size: 9px; }
+.gamepad-1 #padcontent:first-child button { min-width: 28px; border-radius: 11px; }
+.gamepad-1 #padcontent:nth-child(3) button:nth-child(2) { min-width: 34px; height: 32px; border-radius: 10px; }
+
+.gamepad-2 {
+  display: block; position: fixed;
+  left: 0; right: 0; bottom: 0;
+  margin: 0 auto; width: 180px; z-index: 103;
+}
+.gamepad-2 button { height: 32px; width: 32px; font-size: 10px; }
+.gamepad-2 #padcontent:first-child button { min-width: 34px; border-radius: 12px; }
+.gamepad-2 #padcontent:nth-child(3) button:nth-child(2) { min-width: 42px; height: 38px; border-radius: 12px; }
+
+.gamepad-3 {
+  display: block; position: fixed;
+  left: 0; right: 0; bottom: 0;
+  margin: 0 auto; width: 220px; z-index: 103;
+}
+.gamepad-3 button { height: 38px; width: 38px; font-size: 11px; }
+.gamepad-3 #padcontent:first-child button { min-width: 40px; border-radius: 13px; }
+.gamepad-3 #padcontent:nth-child(3) button:nth-child(2) { min-width: 48px; height: 44px; border-radius: 14px; }
+
+.gamepad-4 {
+  display: block; position: fixed;
+  left: 0; right: 0; bottom: 0;
+  margin: 0 auto; width: 260px; z-index: 103;
+}
+.gamepad-4 button { height: 44px; width: 44px; font-size: 13px; }
+.gamepad-4 #padcontent:first-child button { min-width: 46px; border-radius: 14px; }
+.gamepad-4 #padcontent:nth-child(3) button:nth-child(2) { min-width: 56px; height: 50px; border-radius: 16px; }
 
 
 

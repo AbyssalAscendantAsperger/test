@@ -31,12 +31,12 @@
 
         /* ===== GAME VIEW (Modal) ===== */
         #gameView {
-            display: none; position: fixed; inset: 0; background: #050510; z-index: 9999;
+            display: none; position: fixed; inset: 0; background: #0a0a0f; z-index: 9999;
             flex-direction: column;
         }
         #gameView.visible { display: flex; }
         .modal-header {
-            background: #0a0a1e; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+            background: #0e0e16; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
             flex: 0 0 auto; height: 32px; border-bottom: 1px solid #1a1a2e;
         }
         .modal-header h3 { color: #00d4ff; font-size: 11px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -69,63 +69,146 @@
             display: block; border: none; transform-origin: top left; background: #000;
         }
 
-        /* ===== VIRTUAL GAMEPAD (Nokia style: D-pad trái, Số phải) ===== */
+        /* ===== VIRTUAL GAMEPAD — Fluid vw-based ===== */
         .gamepad {
-            display: none; padding: 8px 4px; flex: 0 0 auto;
-            justify-content: center; align-items: flex-start; gap: 24px;
+            display: none; padding: 1.5vw 0 2vw; flex: 0 0 auto;
+            flex-direction: column; align-items: center; gap: 0;
             touch-action: none; width: 100%;
-            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.4));
+            background: #0a0a0f;
+            border-top: 1px solid #1a1a22;
         }
         .gamepad.visible { display: flex; }
-        .gp-left { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        .gp-right { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        
-        .soft-keys { display: flex; gap: 8px; justify-content: space-between; width: 100%; }
+        .gp-top { display: flex; flex-direction: column; align-items: center; gap: 1vw; width: 100%; }
+
+        .nokia-body {
+            width: 100%; padding: 1vw 0 1.5vw;
+            background: transparent;
+            display: flex; flex-direction: column; align-items: center; gap: 1vw;
+        }
+
+        /* ─── Soft keys ─── */
+        .soft-row {
+            display: flex; width: 100%; justify-content: center; align-items: center;
+            gap: 2vw; padding: 0;
+        }
         .soft-key {
-            flex: 1; height: 24px; border-radius: 4px; background: #1a1a3e; color: #888;
-            border: 1px solid #2a2a4e; font-size: 10px; display: flex; align-items: center; justify-content: center;
-            touch-action: none;
+            flex: 0 1 auto; min-width: 12vw; height: 5.5vw; border-radius: 3vw;
+            background: linear-gradient(180deg, #252525, #1a1a1a);
+            color: #8a8a9a; border: 1px solid #333;
+            font-size: 2.4vw; font-weight: 700; letter-spacing: 0.5vw;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+            transition: all 0.06s ease;
         }
-        .soft-key:active { background: #3a3a5e; }
+        .soft-key:active, .soft-key.pressed {
+            background: linear-gradient(180deg, #1a1a1a, #282828);
+            transform: scale(0.92);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 2px 6px rgba(0,0,0,0.5);
+            color: #bbb;
+        }
 
-        .dpad-wrap { position: relative; width: 120px; height: 120px; }
-        .dpad-btn {
-            position: absolute; background: #1a2a3e; color: #6ab4ff; border: 1px solid #2a3a4e;
-            display: flex; align-items: center; justify-content: center; touch-action: none;
-            font-size: 18px;
+        /* ─── D-PAD wheel ─── */
+        .dpad-wheel-wrap {
+            width: 44vw; height: 44vw; max-width: 180px; max-height: 180px;
+            position: relative; margin: 1vw 0;
         }
-        .dpad-btn:active { background: #2a4a6e; }
-        .dpad-up { top: 0; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 6px 6px 0 0; }
-        .dpad-down { bottom: 0; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 0 0 6px 6px; }
-        .dpad-left { left: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 6px 0 0 6px; }
-        .dpad-right { right: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 0 6px 6px 0; }
-        .dpad-center {
-            left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px;
-            border-radius: 50%; background: #1a3a2e; color: #6affb4; font-size: 10px;
+        .dpad-bg-circle {
+            position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 96%; height: 96%; border-radius: 50%;
+            background: #141414; border: 1.5px solid #2a2a2a;
+            z-index: 0;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
         }
-        .dpad-center:active { background: #2a6e5a; }
+        .dpad-seg {
+            position: absolute;
+            background: linear-gradient(180deg, #222, #181818);
+            border: 1.5px solid #333;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            color: #6a8abb;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+            transition: all 0.06s ease;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            overflow: hidden;
+        }
+        .dpad-seg:active, .dpad-seg.pressed {
+            background: linear-gradient(180deg, #181818, #2a2a2a);
+            box-shadow: inset 0 4px 10px rgba(0,0,0,0.6);
+            color: #a0d0ff; z-index: 5;
+        }
+        .dpad-seg .seg-icon { font-size: 4vw; font-weight: bold; line-height: 1; }
+        .dpad-seg .seg-key { font-size: 1.8vw; color: #444; font-weight: 700; letter-spacing: 0.3vw; }
+        .seg-up {
+            top: 0; left: 50%; transform: translateX(-50%);
+            width: 64%; height: 26%;
+            clip-path: polygon(5% 0%, 95% 0%, 70% 100%, 30% 100%);
+        }
+        .seg-down {
+            bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 64%; height: 26%;
+            clip-path: polygon(30% 0%, 70% 0%, 95% 100%, 5% 100%);
+        }
+        .seg-left {
+            left: 0; top: 50%; transform: translateY(-50%);
+            width: 26%; height: 64%;
+            clip-path: polygon(0% 5%, 100% 30%, 100% 70%, 0% 95%);
+        }
+        .seg-right {
+            right: 0; top: 50%; transform: translateY(-50%);
+            width: 26%; height: 64%;
+            clip-path: polygon(0% 30%, 100% 5%, 100% 95%, 0% 70%);
+        }
+        .dpad-ok {
+            position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 30%; height: 30%; border-radius: 50%;
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            color: #7acc9a; border: 2px solid #3a3a3a;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer; z-index: 10;
+            font-weight: 800; line-height: 1;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08);
+            transition: all 0.06s ease;
+        }
+        .dpad-ok .ok-label { font-size: 2.8vw; letter-spacing: 0.3vw; }
+        .dpad-ok .wasd-label { font-size: 1.6vw; color: #555; letter-spacing: 0.2vw; }
+        .dpad-ok:active, .dpad-ok.pressed {
+            background: linear-gradient(145deg, #1e3a2e, #143028);
+            transform: translate(-50%, -50%) scale(0.92);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.9), inset 0 3px 8px rgba(0,0,0,0.4);
+            color: #90ffc8;
+        }
 
-        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 132px; }
+        /* ─── NUMPAD ─── */
+        .numpad-wrap { width: 100%; padding: 0; display: flex; justify-content: center; }
+        .numpad {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 1.2vw; width: 75vw; max-width: 280px;
+        }
         .num-btn {
-            width: 42px; height: 34px; border-radius: 6px; background: #2a1a1e; color: #ff8a8a;
-            border: 1px solid #3a2a2e; font-size: 13px; display: flex; align-items: center; justify-content: center;
-            touch-action: none;
+            height: 7.5vw; border-radius: 2vw;
+            background: linear-gradient(180deg, #222, #161616);
+            color: #c8c8d0; border: 1px solid #333;
+            font-size: 3.2vw; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            transition: all 0.06s ease;
         }
-        .num-btn:active { background: #4a2a2e; }
-        .game-btns { display: flex; gap: 6px; justify-content: center; }
-        .game-btn { width: 36px; height: 26px; border-radius: 6px; background: #2a2a1e; color: #ffcc6a; border: 1px solid #3a3a2e; font-size: 11px; touch-action: none; }
-        .game-btn:active { background: #4a4a2e; }
+        .num-btn:active, .num-btn.pressed {
+            background: linear-gradient(180deg, #1a1a1a, #2a2a2a);
+            transform: scale(0.93);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 3px 6px rgba(0,0,0,0.5);
+            color: #fff;
+        }
+        .game-btns { display: none; }
+        .game-btn { display: none; }
 
-        /* Mobile nhỏ: thu nhỏ phím */
-        @media (max-width: 400px) {
-            .dpad-wrap { width: 100px; height: 100px; }
-            .dpad-up, .dpad-down, .dpad-left, .dpad-right { width: 34px; height: 34px; }
-            .dpad-center { width: 38px; height: 38px; }
-            .numpad { width: 114px; }
-            .num-btn { width: 36px; height: 30px; font-size: 12px; }
-            .game-btn { width: 32px; }
-            .gamepad { gap: 12px; padding: 4px; }
-        }
+        .nokia-sep { width: 50%; height: 1px; background: #1a1a22; margin: 0.5vw 0; border: none; }
+        .nokia-brand { color: #2a2a2a; font-size: 1.6vw; font-weight: 700; letter-spacing: 1vw; text-transform: uppercase; }
     </style>
 </head>
 <body>
@@ -135,7 +218,12 @@
             <h1>🎮 J2ME Portal</h1>
             <p>Chọn game để chơi</p>
         </div>
-        <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:12px"></div>
+            <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:8px"></div>
+        <input id="searchBox" type="text" placeholder="🔍 Tìm game..." style="
+            width:100%; padding:10px 14px; margin-bottom:12px; border-radius:10px;
+            border:1px solid #333; background:#1a1a2e; color:#ddd; font-size:14px;
+            outline:none; box-sizing:border-box;
+        " oninput="filterGames(this.value)">
         <div class="jar-list-wrap">
             <div id="jarList" class="jar-list"></div>
         </div>
@@ -159,38 +247,72 @@
                 </div>
             </div>
             <div class="gamepad" id="gamepad">
-                    <div class="gp-left">
-                        <div class="soft-keys">
-                            <button class="soft-key" data-code="-6">L</button>
-                            <button class="soft-key" data-code="-7">R</button>
-                        </div>
-                        <div class="dpad-wrap">
-                            <button class="dpad-btn dpad-up" data-code="-1">▲</button>
-                            <button class="dpad-btn dpad-left" data-code="-3">◀</button>
-                            <button class="dpad-btn dpad-center" data-code="-5">OK</button>
-                            <button class="dpad-btn dpad-right" data-code="-4">▶</button>
-                            <button class="dpad-btn dpad-down" data-code="-2">▼</button>
+                    <div class="gp-top">
+                        <div class="nokia-body">
+                            <div class="nokia-brand">NOKIA</div>
+                            <div class="soft-row">
+                                <button class="soft-key" data-code="-6">L</button>
+                                <button class="soft-key" data-code="122">C</button>
+                                <button class="soft-key" data-code="99">D</button>
+                                <button class="soft-key" data-code="-7">R</button>
+                            </div>
+                            <hr class="nokia-sep">
+                            <div class="dpad-wheel-wrap">
+                                <div class="dpad-bg-circle"></div>
+                                <button class="dpad-seg seg-up" data-code="-1">
+                                    <span class="seg-icon">▲</span>
+                                    <span class="seg-key">W</span>
+                                </button>
+                                <button class="dpad-seg seg-left" data-code="-3">
+                                    <span class="seg-icon">◀</span>
+                                    <span class="seg-key">A</span>
+                                </button>
+                                <button class="dpad-seg seg-right" data-code="-4">
+                                    <span class="seg-icon">▶</span>
+                                    <span class="seg-key">D</span>
+                                </button>
+                                <button class="dpad-seg seg-down" data-code="-2">
+                                    <span class="seg-icon">▼</span>
+                                    <span class="seg-key">S</span>
+                                </button>
+                                <button class="dpad-ok" data-code="-5">
+                                    <span class="ok-label">OK</span>
+                                    <span class="wasd-label">WASD</span>
+                                </button>
+                            </div>
+                            <hr class="nokia-sep">
+                            <div class="numpad-wrap">
+                                <div class="numpad">
+                                    <button class="num-btn" data-code="49">1</button>
+                                    <button class="num-btn" data-code="50">2</button>
+                                    <button class="num-btn" data-code="51">3</button>
+                                    <button class="num-btn" data-code="52">4</button>
+                                    <button class="num-btn" data-code="53">5</button>
+                                    <button class="num-btn" data-code="54">6</button>
+                                    <button class="num-btn" data-code="55">7</button>
+                                    <button class="num-btn" data-code="56">8</button>
+                                    <button class="num-btn" data-code="57">9</button>
+                                    <button class="num-btn" data-code="42">*</button>
+                                    <button class="num-btn" data-code="48">0</button>
+                                    <button class="num-btn" data-code="35">#</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="gp-right">
-                        <div class="numpad">
-                            <button class="num-btn" data-code="49">1</button><button class="num-btn" data-code="50">2</button><button class="num-btn" data-code="51">3</button>
-                            <button class="num-btn" data-code="52">4</button><button class="num-btn" data-code="53">5</button><button class="num-btn" data-code="54">6</button>
-                            <button class="num-btn" data-code="55">7</button><button class="num-btn" data-code="56">8</button><button class="num-btn" data-code="57">9</button>
-                            <button class="num-btn" data-code="42">*</button><button class="num-btn" data-code="48">0</button><button class="num-btn" data-code="35">#</button>
-                        </div>
-                        <div class="game-btns">
-                            <button class="game-btn" data-code="122">C</button>
-                            <button class="game-btn" data-code="99">D</button>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let currentFrame = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotateAttempts = 0, autoRotateTried = false, closing = false, gamepadVisible = false, isFullscreen = false;
+        let currentFrame = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, closing = false, gamepadVisible = false, isFullscreen = false;
+
+        function filterGames(q) {
+            q = q.toLowerCase().trim();
+            document.querySelectorAll('.jar-card').forEach(card => {
+                const name = card.querySelector('.jar-name');
+                card.style.display = (!q || (name && name.textContent.toLowerCase().includes(q))) ? '' : 'none';
+            });
+        }
 
         async function loadJars() {
             const container = document.getElementById('jarList');
@@ -219,7 +341,7 @@
             document.getElementById('modalTitle').textContent = gameName || 'Game';
             document.getElementById('gameView').classList.add('visible');
             currentFrame = document.getElementById('emulatorFrame');
-            autoRotateTried = false; closing = false;
+            closing = false;
             document.getElementById('saveStatus').textContent = '⏳';
             try {
                 await loadSaveFromServer();
@@ -262,8 +384,8 @@
         function bindGamepadButtons() {
             document.querySelectorAll('[data-code]').forEach(btn => {
                 const code = parseInt(btn.dataset.code, 10);
-                const press = function(e) { e.preventDefault(); e.stopPropagation(); sendKeyRaw(code, true); };
-                const release = function(e) { e.preventDefault(); e.stopPropagation(); sendKeyRaw(code, false); };
+                const press = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.add('pressed'); sendKeyRaw(code, true); };
+                const release = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.remove('pressed'); sendKeyRaw(code, false); };
                 btn.addEventListener('touchstart', press, { passive: false });
                 btn.addEventListener('touchend', release, { passive: false });
                 btn.addEventListener('touchcancel', release, { passive: false });
@@ -278,12 +400,14 @@
             const m = currentFrame.src.match(/canvasSize=size-(\d+)x(\d+)/);
             if (!m) return;
             currentFrame.src = currentFrame.src.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=size-' + m[2] + 'x' + m[1]);
-            autoRotateTried = true; stopAutoRotate(); startAutoFit();
+            stopAutoRotate(); startAutoFit();
+            // Restart auto-rotate after iframe reloads
+            setTimeout(() => { startAutoRotate(); }, 3000);
         }
-        function startAutoRotate() { stopAutoRotate(); autoRotateAttempts = 0; autoRotateTimer = setInterval(() => { if (!currentFrame || closing) { stopAutoRotate(); return; } if (++autoRotateAttempts > 10) { stopAutoRotate(); return; } autoDetectOrientation(); }, 1000); }
+        function startAutoRotate() { stopAutoRotate(); autoRotateTimer = setInterval(() => { if (!currentFrame || closing) { stopAutoRotate(); return; } autoDetectOrientation(); }, 2000); }
         function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
         function autoDetectOrientation() {
-            if (autoRotateTried || !currentFrame || closing) return;
+            if (!currentFrame || closing) return;
             try {
                 const doc = currentFrame.contentWindow && currentFrame.contentWindow.document; if (!doc) return;
                 const canvas = doc.getElementById('canvas'); if (!canvas || !canvas.width || !canvas.height) return;
@@ -336,21 +460,50 @@
         function hookExit(iframe) {
             let win; try { win = iframe.contentWindow; } catch(e) { return; }
             if (!win) return;
+            // 1) Override showExitScreen nếu có
             if (typeof win.showExitScreen === 'function') { win.showExitScreen = function() { try { if (win.myflushAll) win.myflushAll(); } catch(e){} handleGameExit('thoát'); }; }
+            // 2) Bắt MỌI lần iframe navigate sang trang khác (cross-origin OK)
+            iframe.addEventListener('load', function onIframeLoad() {
+                if (closing) { iframe.removeEventListener('load', onIframeLoad); return; }
+                try {
+                    const href = iframe.contentWindow.location.href;
+                    // Nếu URL không còn main.html → game đã thoát
+                    if (!href.includes('main.html')) { handleGameExit('rời trang'); return; }
+                } catch(e) {
+                    // Cross-origin: trang khác domain → chắc chắn game đã thoát
+                    handleGameExit('cross-origin redirect');
+                }
+            });
+            // 3) Polling dự phòng: kiểm tra exit-screen + URL
             stopExitWatcher();
-            exitWatcher = setInterval(() => { if (!currentFrame || closing) { stopExitWatcher(); return; } try { const w = iframe.contentWindow; if (!w) return; const href = (w.location && w.location.href) || ''; if (href && !href.includes('main.html')) { handleGameExit('rời trang'); return; } const d = w.document; const es = d && d.getElementById('exit-screen'); if (es && es.style && es.style.display === 'block') { handleGameExit('exit'); return; } } catch(e) {} }, 350);
+            exitWatcher = setInterval(() => {
+                if (!currentFrame || closing) { stopExitWatcher(); return; }
+                try {
+                    const w = iframe.contentWindow; if (!w) return;
+                    const href = (w.location && w.location.href) || '';
+                    if (href && !href.includes('main.html')) { handleGameExit('rời trang'); return; }
+                    const d = w.document;
+                    const es = d && d.getElementById('exit-screen');
+                    if (es && es.style && es.style.display === 'block') { handleGameExit('exit'); return; }
+                } catch(e) {
+                    // Cross-origin exception → game đã thoát
+                    handleGameExit('cross-origin');
+                }
+            }, 500);
         }
         function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
         async function handleGameExit(reason) {
             if (closing || !currentFrame) return; closing = true;
             stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
             document.getElementById('saveStatus').textContent = '💾 ' + reason;
+            // Force-kill iframe NGAY LẬP TỨC (trước khi save)
+            const frame = currentFrame;
+            try { frame.src = 'about:blank'; } catch(e) {}
             await exportSave(true);
             document.getElementById('gameView').classList.remove('visible');
             if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
             hideGamepad(); currentFrame = null;
             if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
-            document.getElementById('emulatorFrame').src = 'about:blank';
         }
 
         function openFsDB() { return new Promise((resolve, reject) => { const req = indexedDB.open('asyncStorage', 4); req.onupgradeneeded = (ev) => { const d = ev.target.result; if (!d.objectStoreNames.contains('fs4')) { const os = d.createObjectStore('fs4', { keyPath: 'pathname' }); os.createIndex('parentDir', 'parentDir', { unique: false }); } }; req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); }
