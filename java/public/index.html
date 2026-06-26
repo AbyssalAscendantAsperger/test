@@ -2,521 +2,384 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>J2ME Portal</title>
     <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            background: #0f0f1a;
-            color: #ddd;
-            margin: 0;
-            padding: 20px;
+            background: #0f0f1a; color: #ddd;
+            user-select: none; -webkit-user-select: none; overscroll-behavior: none;
         }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #00d4ff; margin: 0; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .jar-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 15px;
-        }
-        .jar-card {
-            background: #1a1a2e; border-radius: 12px; padding: 18px;
-            border: 1px solid #333; transition: 0.2s; cursor: pointer;
-            display: flex; gap: 12px; align-items: flex-start;
-        }
-        .jar-card:hover { border-color: #00d4ff; transform: translateY(-3px); }
-        .game-icon {
-            width: 48px; height: 48px; flex: 0 0 48px;
-            object-fit: contain; border-radius: 8px;
-            background: #0f0f1a; image-rendering: pixelated;
-        }
-        .game-icon-placeholder {
-            width: 48px; height: 48px; flex: 0 0 48px; border-radius: 8px;
-            background: #0f0f1a; display: flex; align-items: center; justify-content: center;
-            font-size: 22px;
-        }
+
+        /* ===== GALLERY (trang chọn game) ===== */
+        #gallery { height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+        .header { text-align: center; margin-bottom: 16px; }
+        .header h1 { color: #00d4ff; font-size: 24px; }
+        .header p { color: #888; font-size: 12px; margin-top: 4px; }
+        .jar-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .jar-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; padding-bottom: 20px; }
+        .jar-card { background: #1a1a2e; border-radius: 12px; padding: 12px; border: 1px solid #333; cursor: pointer; display: flex; gap: 10px; align-items: center; transition: 0.2s; }
+        .jar-card:hover { border-color: #00d4ff; transform: translateY(-2px); }
+        .game-icon { width: 40px; height: 40px; border-radius: 8px; background: #0a0a1e; object-fit: contain; image-rendering: pixelated; }
+        .game-icon-placeholder { width: 40px; height: 40px; border-radius: 8px; background: #0a0a1e; display: flex; align-items: center; justify-content: center; font-size: 18px; }
         .game-info { flex: 1; min-width: 0; }
-        .jar-name { font-weight: 600; color: white; margin-bottom: 2px; word-break: break-all; font-size: 13px; }
-        .game-res { font-size: 9px; color: #555; margin-bottom: 6px; }
-        .play-btn {
-            background: #00d4ff; color: black; border: none; padding: 8px 16px;
-            border-radius: 6px; font-weight: bold; margin-top: 6px; width: 100%; cursor: pointer;
+        .jar-name { color: white; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .game-res { font-size: 9px; color: #555; }
+        .play-btn { background: #00d4ff; color: black; border: none; padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; width: 100%; }
+
+        /* ===== GAME VIEW (Modal) ===== */
+        #gameView {
+            display: none; position: fixed; inset: 0; background: #050510; z-index: 9999;
+            flex-direction: column;
         }
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.96); z-index: 9999; justify-content: center; align-items: center;
-        }
-        .modal-content {
-            background: #111; border-radius: 6px; overflow: hidden;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.95); border: 2px solid #222;
-            transform-origin: center center;
-        }
+        #gameView.visible { display: flex; }
         .modal-header {
-            background: #1a1a2e; padding: 4px 8px; display: flex;
-            justify-content: space-between; align-items: center; font-size: 10px; gap: 4px;
+            background: #0a0a1e; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+            flex: 0 0 auto; height: 32px; border-bottom: 1px solid #1a1a2e;
         }
-        .emulator-frame { width: 240px; height: 320px; border: none; background: #000; display: block; }
-        .modal-header h3 {
-            margin: 0; color: #00d4ff; font-size: 10px; max-width: 110px;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        .modal-header h3 { color: #00d4ff; font-size: 11px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .save-status { color: #00c853; font-size: 10px; max-width: 60px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hdr-btn { border: none; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 13px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+        .close-btn { background: #ff4757; color: white; }
+        .save-btn { background: #2d4a2d; color: #6cff6c; }
+        .rotate-btn { background: #2d3a4a; color: #7cc4ff; }
+        .pad-btn { background: #3a2d4a; color: #cc7cff; }
+        .pad-btn.active { background: #5a4a6a; }
+        .fs-btn { background: #2d4a3a; color: #7cffcc; }
+
+        /* Vùng chứa game + gamepad */
+        .game-body {
+            flex: 1 1 auto; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden;
         }
-        .close-btn {
-            background: #ff4757; color: white; border: none; width: 18px; height: 18px;
-            border-radius: 50%; cursor: pointer; font-size: 12px; flex: 0 0 auto;
+        /* screen-area: vùng đệm CHỐT CỨNG không gian, không bị ảnh hưởng bởi iframe */
+        .screen-area {
+            flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+            min-height: 0; overflow: hidden; padding: 4px;
         }
-        .status { text-align: center; margin-bottom: 20px; color: #00c853; font-size: 14px; }
-        .hint { text-align: center; font-size: 9px; color: #555; padding: 2px; background: #1a1a2e; }
-        .save-status {
-            color: #00c853; font-size: 9px; margin-left: auto; margin-right: 2px;
-            max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        /* screen-frame: khung đen bao quanh game, có kích thước pixel CHÍNH XÁC */
+        .screen-frame {
+            background: #000; border: 3px solid #1a1a2e; border-radius: 8px;
+            flex: 0 0 auto; position: relative; overflow: hidden;
         }
-        .save-btn {
-            background: #2d4a2d; color: #6cff6c; border: none; width: 18px; height: 18px;
-            border-radius: 50%; cursor: pointer; font-size: 10px; flex: 0 0 auto;
+        /* iframe: nằm trong screen-frame, scale bằng transform-origin top-left */
+        .emulator-frame {
+            display: block; border: none; transform-origin: top left; background: #000;
         }
-        .save-btn:hover { background: #3a6b3a; }
-        .rotate-btn {
-            background: #2d3a4a; color: #7cc4ff; border: none; width: 18px; height: 18px;
-            border-radius: 50%; cursor: pointer; font-size: 10px; flex: 0 0 auto;
+
+        /* ===== VIRTUAL GAMEPAD (Nokia style: D-pad trái, Số phải) ===== */
+        .gamepad {
+            display: none; padding: 8px 4px; flex: 0 0 auto;
+            justify-content: center; align-items: flex-start; gap: 24px;
+            touch-action: none; width: 100%;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.4));
         }
-        .rotate-btn:hover { background: #3a4f6a; }
+        .gamepad.visible { display: flex; }
+        .gp-left { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .gp-right { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        
+        .soft-keys { display: flex; gap: 8px; justify-content: space-between; width: 100%; }
+        .soft-key {
+            flex: 1; height: 24px; border-radius: 4px; background: #1a1a3e; color: #888;
+            border: 1px solid #2a2a4e; font-size: 10px; display: flex; align-items: center; justify-content: center;
+            touch-action: none;
+        }
+        .soft-key:active { background: #3a3a5e; }
+
+        .dpad-wrap { position: relative; width: 120px; height: 120px; }
+        .dpad-btn {
+            position: absolute; background: #1a2a3e; color: #6ab4ff; border: 1px solid #2a3a4e;
+            display: flex; align-items: center; justify-content: center; touch-action: none;
+            font-size: 18px;
+        }
+        .dpad-btn:active { background: #2a4a6e; }
+        .dpad-up { top: 0; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 6px 6px 0 0; }
+        .dpad-down { bottom: 0; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 0 0 6px 6px; }
+        .dpad-left { left: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 6px 0 0 6px; }
+        .dpad-right { right: 0; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 0 6px 6px 0; }
+        .dpad-center {
+            left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px;
+            border-radius: 50%; background: #1a3a2e; color: #6affb4; font-size: 10px;
+        }
+        .dpad-center:active { background: #2a6e5a; }
+
+        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 132px; }
+        .num-btn {
+            width: 42px; height: 34px; border-radius: 6px; background: #2a1a1e; color: #ff8a8a;
+            border: 1px solid #3a2a2e; font-size: 13px; display: flex; align-items: center; justify-content: center;
+            touch-action: none;
+        }
+        .num-btn:active { background: #4a2a2e; }
+        .game-btns { display: flex; gap: 6px; justify-content: center; }
+        .game-btn { width: 36px; height: 26px; border-radius: 6px; background: #2a2a1e; color: #ffcc6a; border: 1px solid #3a3a2e; font-size: 11px; touch-action: none; }
+        .game-btn:active { background: #4a4a2e; }
+
+        /* Mobile nhỏ: thu nhỏ phím */
+        @media (max-width: 400px) {
+            .dpad-wrap { width: 100px; height: 100px; }
+            .dpad-up, .dpad-down, .dpad-left, .dpad-right { width: 34px; height: 34px; }
+            .dpad-center { width: 38px; height: 38px; }
+            .numpad { width: 114px; }
+            .num-btn { width: 36px; height: 30px; font-size: 12px; }
+            .game-btn { width: 32px; }
+            .gamepad { gap: 12px; padding: 4px; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- GALLERY -->
+    <div id="gallery">
         <div class="header">
             <h1>🎮 J2ME Portal</h1>
-            <p style="color:#888">Chọn game để chơi</p>
+            <p>Chọn game để chơi</p>
         </div>
-        <div id="status" class="status"></div>
-        <div id="jarList" class="jar-list">
-            <div style="text-align:center;color:#666">Đang tải...</div>
+        <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:12px"></div>
+        <div class="jar-list-wrap">
+            <div id="jarList" class="jar-list"></div>
         </div>
     </div>
 
-    <!-- Modal Emulator -->
-    <div id="emulatorModal" class="modal">
-        <div class="modal-content" id="modalContent">
-            <div class="modal-header">
-                <h3 id="modalTitle">Game</h3>
-                <span id="saveStatus" class="save-status">💾 sẵn sàng</span>
-                <button class="save-btn" title="Lưu ngay lên server" onclick="exportSave(false)">💾</button>
-                <button class="rotate-btn" title="Xoay màn hình" onclick="rotateGame()">↻</button>
-                <button class="close-btn" onclick="closeEmulator()">×</button>
+    <!-- GAME VIEW -->
+    <div id="gameView">
+        <div class="modal-header">
+            <h3 id="modalTitle">Game</h3>
+            <span id="saveStatus" class="save-status">💾</span>
+            <button class="hdr-btn save-btn" title="Lưu" onclick="exportSave(false)">💾</button>
+            <button class="hdr-btn rotate-btn" title="Xoay" onclick="rotateGame()">↻</button>
+            <button class="hdr-btn pad-btn" id="padToggle" title="Bàn phím" onclick="toggleGamepad()">📱</button>
+            <button class="hdr-btn fs-btn" title="Toàn màn hình" onclick="toggleFullscreen()">⛶</button>
+            <button class="hdr-btn close-btn" title="Đóng" onclick="closeEmulator()">×</button>
+        </div>
+        <div class="game-body" id="gameBody">
+            <div class="screen-area" id="screenArea">
+                <div class="screen-frame" id="screenFrame">
+                    <iframe id="emulatorFrame" class="emulator-frame"></iframe>
+                </div>
             </div>
-            <iframe id="emulatorFrame" class="emulator-frame"></iframe>
-            <div class="hint">Nhấn vào màn hình • WASD + Space + Q/E</div>
+            <div class="gamepad" id="gamepad">
+                    <div class="gp-left">
+                        <div class="soft-keys">
+                            <button class="soft-key" data-code="-6">L</button>
+                            <button class="soft-key" data-code="-7">R</button>
+                        </div>
+                        <div class="dpad-wrap">
+                            <button class="dpad-btn dpad-up" data-code="-1">▲</button>
+                            <button class="dpad-btn dpad-left" data-code="-3">◀</button>
+                            <button class="dpad-btn dpad-center" data-code="-5">OK</button>
+                            <button class="dpad-btn dpad-right" data-code="-4">▶</button>
+                            <button class="dpad-btn dpad-down" data-code="-2">▼</button>
+                        </div>
+                    </div>
+                    <div class="gp-right">
+                        <div class="numpad">
+                            <button class="num-btn" data-code="49">1</button><button class="num-btn" data-code="50">2</button><button class="num-btn" data-code="51">3</button>
+                            <button class="num-btn" data-code="52">4</button><button class="num-btn" data-code="53">5</button><button class="num-btn" data-code="54">6</button>
+                            <button class="num-btn" data-code="55">7</button><button class="num-btn" data-code="56">8</button><button class="num-btn" data-code="57">9</button>
+                            <button class="num-btn" data-code="42">*</button><button class="num-btn" data-code="48">0</button><button class="num-btn" data-code="35">#</button>
+                        </div>
+                        <div class="game-btns">
+                            <button class="game-btn" data-code="122">C</button>
+                            <button class="game-btn" data-code="99">D</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        let currentFrame = null;
-        let keyListener = null;
-        let exitWatcher = null;
-        let autosaveTimer = null;
-        let autofitTimer = null;
-        let closing = false;
+        let currentFrame = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotateAttempts = 0, autoRotateTried = false, closing = false, gamepadVisible = false, isFullscreen = false;
 
         async function loadJars() {
             const container = document.getElementById('jarList');
-            const status = document.getElementById('status');
             try {
                 const res = await fetch('/api/jars');
                 const data = await res.json();
-                if (data.error || !data.games?.length) {
-                    container.innerHTML = '<div style="color:#ff6b6b">Không tìm thấy game</div>';
-                    return;
-                }
-                status.innerHTML = '✅ Tìm thấy ' + data.games.length + ' game';
+                if (data.error || !data.games?.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+                document.getElementById('status').innerHTML = '✅ ' + data.games.length + ' game';
                 container.innerHTML = '';
                 data.games.forEach(game => {
                     const card = document.createElement('div');
                     card.className = 'jar-card';
-                    let iconHtml = '';
-                    if (game.hasIcon) {
-                        iconHtml = '<img class="game-icon" src="/api/icon/' + game.id + '" alt="" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">';
-                    } else {
-                        iconHtml = '<div class="game-icon-placeholder">🎮</div>';
-                    }
+                    let iconHtml = game.hasIcon
+                        ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
+                        : '<div class="game-icon-placeholder">🎮</div>';
                     const r = game.resolution;
                     const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + '</div>' : '';
-                    card.innerHTML = iconHtml + '<div class="game-info"><div class="jar-name">' + game.name + '</div>' + resBadge + '<button class="play-btn">▶ Chơi ngay</button></div>';
+                    card.innerHTML = iconHtml + '<div class="game-info"><div class="jar-name">' + game.name + '</div>' + resBadge + '<button class="play-btn">▶ Chơi</button></div>';
                     card.onclick = () => launchGame(game.id, game.name);
                     container.appendChild(card);
                 });
-            } catch (e) {
-                container.innerHTML = '<div style="color:#ff6b6b">Lỗi kết nối server</div>';
-            }
+            } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server</div>'; }
         }
 
         async function launchGame(gameId, gameName) {
-            const modal = document.getElementById('emulatorModal');
-            const frame = document.getElementById('emulatorFrame');
-            const title = document.getElementById('modalTitle');
-            const status = document.getElementById('saveStatus');
-            title.textContent = gameName || 'Game';
-            modal.style.display = 'flex';
-            currentFrame = frame;
-            currentGameId = gameId;
-            autoRotateTried = false;
-            closing = false;
-            if (status) status.textContent = '⏳ đang tải save...';
+            document.getElementById('modalTitle').textContent = gameName || 'Game';
+            document.getElementById('gameView').classList.add('visible');
+            currentFrame = document.getElementById('emulatorFrame');
+            autoRotateTried = false; closing = false;
+            document.getElementById('saveStatus').textContent = '⏳';
             try {
                 await loadSaveFromServer();
                 const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId));
                 const data = await r.json();
                 if (data.success) {
-                    // URL đã chứa canvasSize tự động từ server -> dùng trực tiếp
-                    frame.src = data.url;
-                    setTimeout(() => {
-                        setupKeyboardMapping(frame);
-                        hookExit(frame);
-                        startAutosave();
-                        startAutoFit();
-                        frame.focus();
-                    }, 2000);
-                    startAutoRotate();
-                } else if (data.error) {
-                    frame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>';
-                }
-            } catch (e) {
-                frame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi kết nối</h3>';
+                    currentFrame.src = data.url;
+                    setTimeout(() => { setupKeyboardMapping(currentFrame); hookExit(currentFrame); startAutosave(); startAutoFit(); startAutoRotate(); currentFrame.focus(); }, 2000);
+                    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) showGamepad();
+                } else if (data.error) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>'; }
+            } catch (e) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi</h3>'; }
+        }
+
+        function toggleFullscreen() {
+            const el = document.getElementById('gameView');
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+                isFullscreen = true;
+            } else {
+                (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+                isFullscreen = false;
             }
+            setTimeout(() => fitFrame(), 300);
         }
+        document.addEventListener('fullscreenchange', () => setTimeout(() => fitFrame(), 200));
+        document.addEventListener('webkitfullscreenchange', () => setTimeout(() => fitFrame(), 200));
 
-        function startAutoFit() {
-            stopAutoFit();
-            autofitTimer = setInterval(() => {
-                if (!currentFrame || closing) { stopAutoFit(); return; }
-                fitFrame();
-            }, 400);
-        }
-        function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+        function toggleGamepad() { gamepadVisible ? hideGamepad() : showGamepad(); }
+        function showGamepad() { gamepadVisible = true; document.getElementById('gamepad').classList.add('visible'); document.getElementById('padToggle').classList.add('active'); setTimeout(() => fitFrame(), 50); }
+        function hideGamepad() { gamepadVisible = false; document.getElementById('gamepad').classList.remove('visible'); document.getElementById('padToggle').classList.remove('active'); setTimeout(() => fitFrame(), 50); }
 
-        function fitFrame() {
-            const frame = document.getElementById('emulatorFrame');
-            const modalContent = document.getElementById('modalContent');
+        function sendKeyRaw(code, isPress) {
             try {
-                const win = frame.contentWindow;
-                const doc = win && win.document;
-                if (!doc) return;
-                const canvas = doc.getElementById('canvas');
-                if (!canvas) return;
-                const cw = canvas.width, ch = canvas.height;
-                if (!cw || !ch || (cw === frame._fitW && ch === frame._fitH)) return;
-                frame._fitW = cw; frame._fitH = ch;
-                const maxW = window.innerWidth - 24;
-                const maxH = window.innerHeight - 70;
-                const scale = Math.min(1, maxW / cw, maxH / ch);
-                frame.style.width = cw + 'px';
-                frame.style.height = ch + 'px';
-                modalContent.style.width = cw + 'px';
-                modalContent.style.transform = scale < 1 ? 'scale(' + scale + ')' : 'none';
+                const win = currentFrame && currentFrame.contentWindow;
+                if (!win || !win.MIDP) return;
+                if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(code);
+                else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(code);
             } catch (e) {}
         }
+        function bindGamepadButtons() {
+            document.querySelectorAll('[data-code]').forEach(btn => {
+                const code = parseInt(btn.dataset.code, 10);
+                const press = function(e) { e.preventDefault(); e.stopPropagation(); sendKeyRaw(code, true); };
+                const release = function(e) { e.preventDefault(); e.stopPropagation(); sendKeyRaw(code, false); };
+                btn.addEventListener('touchstart', press, { passive: false });
+                btn.addEventListener('touchend', release, { passive: false });
+                btn.addEventListener('touchcancel', release, { passive: false });
+                btn.addEventListener('mousedown', press);
+                btn.addEventListener('mouseup', release);
+                btn.addEventListener('mouseleave', release);
+            });
+        }
 
-        let autoRotateTried = false;
-        let autoRotateTimer = null;
-        let autoRotateAttempts = 0;
-        let currentGameId = null;
-
-        // ==================== XOAY MÀN HÌNH + TỰ PHÁT HIỆN HƯỚNG ====================
         function rotateGame() {
             if (!currentFrame || closing) return;
-            const oldSrc = currentFrame.src;
-            const m = oldSrc.match(/canvasSize=size-(\d+)x(\d+)/);
+            const m = currentFrame.src.match(/canvasSize=size-(\d+)x(\d+)/);
             if (!m) return;
-            const newRes = 'size-' + m[2] + 'x' + m[1];
-            currentFrame.src = oldSrc.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=' + newRes);
-            autoRotateTried = true;
-            stopAutoRotate();
-            startAutoFit();
+            currentFrame.src = currentFrame.src.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=size-' + m[2] + 'x' + m[1]);
+            autoRotateTried = true; stopAutoRotate(); startAutoFit();
         }
-
-        // Polling mỗi 1 giây: chỉ xoay khi game đã render nội dung thật (canvas không còn trống)
-        function startAutoRotate() {
-            stopAutoRotate();
-            autoRotateAttempts = 0;
-            autoRotateTimer = setInterval(() => {
-                if (!currentFrame || closing) { stopAutoRotate(); return; }
-                autoRotateAttempts++;
-                if (autoRotateAttempts > 10) { stopAutoRotate(); return; }
-                autoDetectOrientation();
-            }, 1000);
-        }
-        function stopAutoRotate() {
-            if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; }
-        }
-
-        // Scan pixel: trả true khi đã thấy nội dung (dừng polling), false khi canvas còn trống
+        function startAutoRotate() { stopAutoRotate(); autoRotateAttempts = 0; autoRotateTimer = setInterval(() => { if (!currentFrame || closing) { stopAutoRotate(); return; } if (++autoRotateAttempts > 10) { stopAutoRotate(); return; } autoDetectOrientation(); }, 1000); }
+        function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
         function autoDetectOrientation() {
-            if (autoRotateTried || !currentFrame || closing) return true;
+            if (autoRotateTried || !currentFrame || closing) return;
             try {
-                const win = currentFrame.contentWindow;
-                const doc = win && win.document;
-                if (!doc) return false;
-                const canvas = doc.getElementById('canvas');
-                if (!canvas || !canvas.width || !canvas.height) return false;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return false;
-                const w = canvas.width, h = canvas.height;
-                const halfW = Math.floor(w / 2), halfH = Math.floor(h / 2);
-                let q = [0, 0, 0, 0], total = 0;
-                for (let y = 0; y < h; y += 2) {
-                    for (let x = 0; x < w; x += 2) {
-                        const data = ctx.getImageData(x, y, 1, 1).data;
-                        const r = data[0], g = data[1], b = data[2];
-                        const isBg = (r < 8 && g < 8 && b < 8) || (r > 247 && g > 247 && b > 247);
-                        if (!isBg) { q[(x < halfW ? 0 : 1) + (y < halfH ? 0 : 2)]++; total++; }
-                    }
-                }
-                if (total < 50) return false; // canvas còn trống -> đợi lần sau
-                const ratio = total / ((w / 2) * (h / 2));
-                if (ratio < 0.55) {
-                    const topC = q[0] + q[1], botC = q[2] + q[3];
-                    const leftC = q[0] + q[2], rightC = q[1] + q[3];
-                    if (h > w && topC > 0 && botC < topC * 0.25) { rotateGame(); return true; }
-                    if (w > h && leftC > 0 && rightC < leftC * 0.25) { rotateGame(); return true; }
-                }
-                return true;
-            } catch (e) { return false; }
+                const doc = currentFrame.contentWindow && currentFrame.contentWindow.document; if (!doc) return;
+                const canvas = doc.getElementById('canvas'); if (!canvas || !canvas.width || !canvas.height) return;
+                const ctx = canvas.getContext('2d'); if (!ctx) return;
+                const w = canvas.width, h = canvas.height; let q = [0,0,0,0], total = 0;
+                for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) { const d = ctx.getImageData(x, y, 1, 1).data; const bg = (d[0]<8&&d[1]<8&&d[2]<8) || (d[0]>247&&d[1]>247&&d[2]>247); if (!bg) { q[(x<w/2?0:1)+(y<h/2?0:2)]++; total++; } }
+                if (total < 50) return;
+                if (total / ((w/2)*(h/2)) < 0.55) { const tc=q[0]+q[1], bc=q[2]+q[3], lc=q[0]+q[2], rc=q[1]+q[3]; if (h>w && tc>0 && bc<tc*0.25) { rotateGame(); return; } if (w>h && lc>0 && rc<lc*0.25) { rotateGame(); return; } }
+            } catch(e) {}
         }
 
         function setupKeyboardMapping(iframe) {
-            const keyMap = {
-                'w': { code: -1 }, 'a': { code: -3 }, 's': { code: -2 }, 'd': { code: -4 },
-                'q': { code: -6 }, 'e': { code: -7 },
-                'z': { code: 122 }, 'c': { code: 99 },
-                ' ': { code: -5 },
-                '0': { code: 48 }, '1': { code: 49 }, '2': { code: 50 }, '3': { code: 51 },
-                '4': { code: 52 }, '5': { code: 53 }, '6': { code: 54 }, '7': { code: 55 },
-                '8': { code: 56 }, '9': { code: 57 },
-                '*': { code: 42 }, '#': { code: 35 }
-            };
-            function sendKey(mapped, isPress) {
-                try {
-                    const win = iframe.contentWindow;
-                    if (!win || !win.MIDP) return;
-                    if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(mapped.code);
-                    else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(mapped.code);
-                } catch (e) {}
-            }
-            if (keyListener) {
-                document.removeEventListener('keydown', keyListener);
-                document.removeEventListener('keyup', keyListener);
-            }
-            keyListener = function(e) {
-                if (!currentFrame) return;
-                const mapped = keyMap[e.key.toLowerCase()];
-                if (mapped) { e.preventDefault(); sendKey(mapped, e.type === 'keydown'); }
-            };
+            const keyMap = { 'w':-1,'a':-3,'s':-2,'d':-4,'q':-6,'e':-7,'z':122,'c':99,' ':-5,'0':48,'1':49,'2':50,'3':51,'4':52,'5':53,'6':54,'7':55,'8':56,'9':57,'*':42,'#':35 };
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); }
+            keyListener = function(e) { if (!currentFrame) return; const code = keyMap[e.key.toLowerCase()]; if (code !== undefined) { e.preventDefault(); sendKeyRaw(code, e.type === 'keydown'); } };
             document.addEventListener('keydown', keyListener);
             document.addEventListener('keyup', keyListener);
-            currentFrame.onclick = () => currentFrame.contentWindow.focus();
-            currentFrame.ontouchstart = () => currentFrame.contentWindow.focus();
+        }
+
+        function startAutoFit() { stopAutoFit(); autofitTimer = setInterval(() => { if (currentFrame && !closing) fitFrame(); }, 400); }
+        function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+        function fitFrame() {
+            const frame = document.getElementById('emulatorFrame');
+            const screenFrame = document.getElementById('screenFrame');
+            const screenArea = document.getElementById('screenArea');
+            try {
+                const doc = frame.contentWindow && frame.contentWindow.document; if (!doc) return;
+                const canvas = doc.getElementById('canvas'); if (!canvas || !canvas.width || !canvas.height) return;
+                const cw = canvas.width, ch = canvas.height;
+                if (cw === frame._fitW && ch === frame._fitH && !frame._fitDirty) return;
+                frame._fitW = cw; frame._fitH = ch; frame._fitDirty = false;
+                
+                const maxW = screenArea.clientWidth - 8;
+                const maxH = screenArea.clientHeight - 8;
+                if (maxW <= 0 || maxH <= 0) return;
+
+                const scale = Math.min(maxW / cw, maxH / ch);
+                const realW = Math.floor(cw * scale);
+                const realH = Math.floor(ch * scale);
+                
+                screenFrame.style.width = realW + 'px';
+                screenFrame.style.height = realH + 'px';
+                
+                frame.style.width = cw + 'px';
+                frame.style.height = ch + 'px';
+                frame.style.transform = 'scale(' + scale + ')';
+            } catch(e) {}
         }
 
         function hookExit(iframe) {
-            let win;
-            try { win = iframe.contentWindow; } catch (e) { return; }
+            let win; try { win = iframe.contentWindow; } catch(e) { return; }
             if (!win) return;
-            if (typeof win.showExitScreen === 'function') {
-                win.showExitScreen = function() {
-                    try { if (win.myflushAll) win.myflushAll(); } catch (e) {}
-                    handleGameExit('game thoát');
-                };
-            }
+            if (typeof win.showExitScreen === 'function') { win.showExitScreen = function() { try { if (win.myflushAll) win.myflushAll(); } catch(e){} handleGameExit('thoát'); }; }
             stopExitWatcher();
-            exitWatcher = setInterval(() => {
-                if (!currentFrame || closing) { stopExitWatcher(); return; }
-                try {
-                    const w = iframe.contentWindow;
-                    if (!w) return;
-                    const href = (w.location && w.location.href) || '';
-                    if (href && !href.includes('main.html')) { handleGameExit('iframe rời main.html'); return; }
-                    const doc = w.document;
-                    const es = doc && doc.getElementById('exit-screen');
-                    if (es && es.style && es.style.display === 'block') { handleGameExit('exit-screen'); return; }
-                    const df = doc && doc.getElementById('download-failure-dialog');
-                    if (df && df.style && df.style.display !== 'none') { handleGameExit('load lỗi'); return; }
-                } catch (e) {}
-            }, 350);
+            exitWatcher = setInterval(() => { if (!currentFrame || closing) { stopExitWatcher(); return; } try { const w = iframe.contentWindow; if (!w) return; const href = (w.location && w.location.href) || ''; if (href && !href.includes('main.html')) { handleGameExit('rời trang'); return; } const d = w.document; const es = d && d.getElementById('exit-screen'); if (es && es.style && es.style.display === 'block') { handleGameExit('exit'); return; } } catch(e) {} }, 350);
         }
         function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
-
         async function handleGameExit(reason) {
-            if (closing || !currentFrame) return;
-            closing = true;
+            if (closing || !currentFrame) return; closing = true;
             stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
-            const status = document.getElementById('saveStatus');
-            if (status) status.textContent = '💾 ' + reason + ', đang lưu...';
+            document.getElementById('saveStatus').textContent = '💾 ' + reason;
             await exportSave(true);
-            document.getElementById('emulatorModal').style.display = 'none';
-            document.getElementById('modalContent').style.transform = 'none';
-            const frame = document.getElementById('emulatorFrame');
-            currentFrame = null;
-            if (keyListener) {
-                document.removeEventListener('keydown', keyListener);
-                document.removeEventListener('keyup', keyListener);
-                keyListener = null;
-            }
-            frame.src = 'about:blank';
+            document.getElementById('gameView').classList.remove('visible');
+            if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
+            hideGamepad(); currentFrame = null;
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
+            document.getElementById('emulatorFrame').src = 'about:blank';
         }
 
-        function openFsDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open('asyncStorage', 4);
-                req.onupgradeneeded = (ev) => {
-                    const d = ev.target.result;
-                    if (!d.objectStoreNames.contains('fs4')) {
-                        const os = d.createObjectStore('fs4', { keyPath: 'pathname' });
-                        os.createIndex('parentDir', 'parentDir', { unique: false });
-                    }
-                };
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        }
-        async function importSaveToIDB(saveObj) {
-            const db = await openFsDB();
-            await new Promise((resolve, reject) => {
-                const tx = db.transaction('fs4', 'readwrite');
-                tx.objectStore('fs4').clear();
-                for (const pathname in saveObj) {
-                    const rec = saveObj[pathname];
-                    if (!rec) continue;
-                    if (!rec.isDir && Array.isArray(rec.data)) {
-                        try { rec.data = new Blob([new Int8Array(rec.data)]); } catch (e) {}
-                    }
-                    rec.pathname = pathname;
-                    tx.objectStore('fs4').put(rec);
-                }
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-            });
-            db.close();
-        }
-        async function readIDBToText() {
-            let db;
-            try { db = await openFsDB(); } catch (e) { return '{}'; }
-            if (!db.objectStoreNames.contains('fs4')) { db.close(); return '{}'; }
-            const text = await new Promise((resolve) => {
-                const tx = db.transaction('fs4', 'readonly');
-                const allReq = tx.objectStore('fs4').getAll();
-                allReq.onsuccess = () => {
-                    const records = allReq.result || [];
-                    const obj = {}; let pending = 0, done = false;
-                    const finish = () => { if (pending === 0 && !done) { done = true; resolve(JSON.stringify(obj)); } };
-                    records.forEach(rec => {
-                        if (!rec || !rec.pathname) return;
-                        if (!rec.isDir && rec.data instanceof Blob) {
-                            pending++;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                                rec.data = Array.prototype.slice.call(new Int8Array(reader.result));
-                                obj[rec.pathname] = rec; pending--; finish();
-                            };
-                            reader.onerror = () => { obj[rec.pathname] = rec; pending--; finish(); };
-                            reader.readAsArrayBuffer(rec.data);
-                        } else { obj[rec.pathname] = rec; }
-                    });
-                    finish();
-                };
-                allReq.onerror = () => resolve('{}');
-            });
-            db.close();
-            return text;
-        }
-        async function getSaveText() {
-            const win = currentFrame && currentFrame.contentWindow;
-            try { if (win && win.myflushAll) win.myflushAll(); } catch (e) {}
-            if (win && win.fs && win.fs.exportStore) {
-                try {
-                    const blob = await new Promise((res) => win.fs.exportStore(res));
-                    if (blob && blob.size > 0) return await blob.text();
-                } catch (e) {}
-            }
-            return await readIDBToText();
-        }
-        async function loadSaveFromServer() {
-            const status = document.getElementById('saveStatus');
-            try {
-                const res = await fetch('/api/load');
-                if (res.status === 404) { if (status) status.textContent = '🆕 game mới'; return; }
-                if (!res.ok) { if (status) status.textContent = '⚠ load lỗi'; return; }
-                const text = await res.text();
-                await importSaveToIDB(JSON.parse(text));
-                if (status) status.textContent = '📥 đã tải save';
-            } catch (e) {
-                if (status) status.textContent = '⚠ tải lỗi';
-            }
-        }
-        async function pushSave(wipe) {
-            const status = document.getElementById('saveStatus');
-            const text = await getSaveText();
-            if (!text || text === '{}') { if (status) status.textContent = '⚠ chưa có dữ liệu'; return false; }
-            const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
-            const j = await r.json();
-            if (wipe) { try { await clearIDB(); } catch (e) {} }
-            if (status) status.textContent = '✅ đã lưu (' + Math.round(j.size / 1024) + 'KB)';
-            return true;
-        }
-        async function clearIDB() {
-            const db = await openFsDB();
-            await new Promise((resolve) => {
-                const tx = db.transaction('fs4', 'readwrite');
-                tx.objectStore('fs4').clear();
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => resolve();
-            });
-            db.close();
-        }
-        async function exportSave(finalWipe) {
-            const status = document.getElementById('saveStatus');
-            try {
-                if (status) status.textContent = '💾 đang lưu...';
-                await pushSave(!!finalWipe);
-            } catch (e) {
-                if (status) status.textContent = '⚠ lưu lỗi';
-            }
-        }
-        function startAutosave() {
-            stopAutosave();
-            autosaveTimer = setInterval(() => { if (currentFrame && !closing) exportSave(false); }, 8000);
-        }
+        function openFsDB() { return new Promise((resolve, reject) => { const req = indexedDB.open('asyncStorage', 4); req.onupgradeneeded = (ev) => { const d = ev.target.result; if (!d.objectStoreNames.contains('fs4')) { const os = d.createObjectStore('fs4', { keyPath: 'pathname' }); os.createIndex('parentDir', 'parentDir', { unique: false }); } }; req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); }
+        async function importSaveToIDB(saveObj) { const db = await openFsDB(); await new Promise((resolve, reject) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); for (const p in saveObj) { const r = saveObj[p]; if (!r) continue; if (!r.isDir && Array.isArray(r.data)) { try { r.data = new Blob([new Int8Array(r.data)]); } catch(e){} } r.pathname = p; tx.objectStore('fs4').put(r); } tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); }
+        async function readIDBToText() { let db; try { db = await openFsDB(); } catch(e) { return '{}'; } if (!db.objectStoreNames.contains('fs4')) { db.close(); return '{}'; } const text = await new Promise((resolve) => { const tx = db.transaction('fs4', 'readonly'); const rq = tx.objectStore('fs4').getAll(); rq.onsuccess = () => { const recs = rq.result || []; const obj = {}; let pending = 0, done = false; const finish = () => { if (pending === 0 && !done) { done = true; resolve(JSON.stringify(obj)); } }; recs.forEach(rec => { if (!rec || !rec.pathname) return; if (!rec.isDir && rec.data instanceof Blob) { pending++; const reader = new FileReader(); reader.onload = () => { rec.data = Array.prototype.slice.call(new Int8Array(reader.result)); obj[rec.pathname] = rec; pending--; finish(); }; reader.onerror = () => { obj[rec.pathname] = rec; pending--; finish(); }; reader.readAsArrayBuffer(rec.data); } else { obj[rec.pathname] = rec; } }); finish(); }; rq.onerror = () => resolve('{}'); }); db.close(); return text; }
+        async function getSaveText() { const win = currentFrame && currentFrame.contentWindow; try { if (win && win.myflushAll) win.myflushAll(); } catch(e) {} if (win && win.fs && win.fs.exportStore) { try { const blob = await new Promise((res) => win.fs.exportStore(res)); if (blob && blob.size > 0) return await blob.text(); } catch(e) {} } return await readIDBToText(); }
+        async function loadSaveFromServer() { const status = document.getElementById('saveStatus'); try { const res = await fetch('/api/load'); if (res.status === 404) { if (status) status.textContent = '🆕'; return; } if (!res.ok) return; await importSaveToIDB(JSON.parse(await res.text())); if (status) status.textContent = '📥'; } catch(e) {} }
+        async function exportSave(finalWipe) { const status = document.getElementById('saveStatus'); try { if (status) status.textContent = '💾...'; const text = await getSaveText(); if (!text || text === '{}') { if (status) status.textContent = '⚠'; return; } const r = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text }); const j = await r.json(); if (finalWipe) { try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {} } if (status) status.textContent = '✅'; } catch(e) { if (status) status.textContent = '⚠'; } }
+        function startAutosave() { stopAutosave(); autosaveTimer = setInterval(() => { if (currentFrame && !closing) exportSave(false); }, 8000); }
         function stopAutosave() { if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; } }
 
         async function closeEmulator() {
-            if (closing || !currentFrame) return;
-            closing = true;
+            if (closing || !currentFrame) return; closing = true;
             stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
-            const status = document.getElementById('saveStatus');
-            if (status) status.textContent = '💾 đang lưu...';
+            document.getElementById('saveStatus').textContent = '💾...';
             await exportSave(true);
-            document.getElementById('emulatorModal').style.display = 'none';
-            document.getElementById('modalContent').style.transform = 'none';
-            const frame = document.getElementById('emulatorFrame');
-            currentFrame = null;
-            if (keyListener) {
-                document.removeEventListener('keydown', keyListener);
-                document.removeEventListener('keyup', keyListener);
-                keyListener = null;
-            }
-            frame.src = 'about:blank';
+            document.getElementById('gameView').classList.remove('visible');
+            if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
+            hideGamepad(); currentFrame = null;
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
+            document.getElementById('emulatorFrame').src = 'about:blank';
         }
 
-        window.onload = () => {
-            loadJars();
-            document.getElementById('emulatorModal').onclick = function(e) {
-                if (e.target.id === 'emulatorModal') closeEmulator();
-            };
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    if (document.getElementById('emulatorModal').style.display === 'flex') closeEmulator();
-                }
-            });
-        };
+        window.addEventListener('DOMContentLoaded', () => {
+            bindGamepadButtons(); loadJars();
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && document.getElementById('gameView').classList.contains('visible')) closeEmulator(); });
+            window.addEventListener('resize', () => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } });
+            window.addEventListener('orientationchange', () => { setTimeout(() => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } }, 300); });
+        });
     </script>
 </body>
 </html>

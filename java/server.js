@@ -35,6 +35,21 @@ function getOrCreateSid(req, res) {
 // Áp dụng session cho MỌI request
 app.use((req, res, next) => { req.sid = getOrCreateSid(req, res); next(); });
 
+// ==================== BẢO MẬT: CORS + HTTPS ENFORCEMENT ====================
+// CORS: chỉ cho phép domain cấu hình (mặc định * cho dev localhost).
+// Production: set env ALLOWED_ORIGIN=https://jarnova.com
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // HSTS: bắt buộc HTTPS trong 1 năm (chỉ hiệu lực khi đang chạy HTTPS thật)
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 // Middleware: phục vụ Portal (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 
