@@ -8,9 +8,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // === CẤU HÌNH ĐƯỜNG DẪN ===
-const JAVA_DIR = path.join(__dirname, '..', 'java');   // Thư mục emulator gốc
+const JAVA_DIR = __dirname;   // Thư mục emulator gốc (chính là project/java)
 const JAR_DIR = path.join(JAVA_DIR, 'jar');
-const SAVES_DIR = path.join(__dirname, 'saves');        // Lưu save game theo phiên/user
+const SAVES_DIR = path.join(JAVA_DIR, 'saves');        // Lưu save game theo phiên/user
 fs.mkdirSync(SAVES_DIR, { recursive: true });
 
 // === SESSION: mỗi trình duyệt/user 1 sid (cookie) -> 1 file save riêng ===
@@ -257,10 +257,16 @@ setInterval(() => {
 
 // 3) Endpoint phục vụ JAR duy nhất: /emu/jar/:token
 app.get('/emu/jar/:token', (req, res) => {
-  const info = verifyToken(req.params.token);
+  const rawToken = req.params.token;
+  // Bóc tách token từ abc.jar hoặc abc
+  const token = rawToken.endsWith('.jar') ? rawToken.slice(0, -4) : rawToken;
+  
+  const info = verifyToken(token);
   if (!info) return res.status(403).send('Forbidden');
+  
   const game = gameRegistry.get(info.gameId);
   if (!game || !fs.existsSync(game.fullPath)) return res.status(404).send('Not found');
+  
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -306,17 +312,22 @@ app.get('/api/launch', (req, res) => {
   if (!rateLimitCheck(req.sid)) {
     return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
   }
-  rebuildGameRegistryIfNeeded(); // cập nhật nếu có game mới/xóa trước khi tìm
+  rebuildGameRegistryIfNeeded(); 
   const { id, enginemode } = req.query;
   const game = gameRegistry.get(id);
   if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
+  
   const token = issueToken(id);
   const r = game.resolution;
   const canvasSize = `size-${r.width}x${r.height}`;
-  let emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}`;
-  if (enginemode) {
-    emulatorUrl += `&enginemode=${encodeURIComponent(enginemode)}`;
-  }
+  
+  // Trình giả lập cần chính xác định dạng enginemodeX-classesY.jar
+  let modeParam = enginemode; 
+  if (!modeParam) modeParam = 'enginemode2-classes2.jar';
+
+  // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
+  const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
+  
   res.json({ success: true, url: emulatorUrl, resolution: r });
 });
 

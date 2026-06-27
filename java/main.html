@@ -59,7 +59,12 @@
   <script type="text/javascript" src="bld/main-all.js" defer></script>
   
   <script type="text/javascript" src="keymap.js"></script>
-  
+  <style>
+    /* Chỉ ẩn bàn phím nội bộ và các nút thừa, không can thiệp vào nền hay canvas */
+    #gamepad, #sidebar, header, #back-button { display: none !important; }
+    /* Giữ nền đen cho drawer để khớp với Portal */
+    #drawer, #main, #display-container { background: #000 !important; }
+  </style>
 </head>
 
 <body>

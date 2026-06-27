@@ -229,15 +229,16 @@
             outline:none; box-sizing:border-box;
         " oninput="filterGames(this.value)">
         <div class="jar-list-wrap">
-            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                <label for="engineModeSelect" style="font-size: 13px; color: #aaa;">Chế độ:</label>
+            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; background: #1a1a2e; padding: 10px; border-radius: 10px; border: 1px solid #333;">
+                <label for="engineModeSelect" style="font-size: 13px; color: #00d4ff; font-weight: bold;">Chế độ Engine:</label>
                 <select id="engineModeSelect" style="
-                    flex: 1; padding: 8px; border-radius: 8px;
-                    border: 1px solid #333; background: #1a1a2e; color: #ddd; font-size: 13px;
+                    flex: 1; padding: 6px; border-radius: 6px;
+                    border: 1px solid #444; background: #0f0f1a; color: #ddd; font-size: 13px;
                     outline: none;
-                ">
-                    <option value="enginemode1-classesold.jar">1 - Tương thích (Ổn định)</option>
-                    <option value="enginemode2-classes2.jar" selected>2 - Tiêu chuẩn (Nhanh)</option>
+                " onchange="localStorage.setItem('preferredEngineMode', this.value)">
+                    <option value="enginemode1-classesold.jar">1 - Chế độ tương thích (Ổn định)</option>
+                    <option value="enginemode2-classes2.jar" selected>2 - Chế độ tiêu chuẩn (Nhanh)</option>
+                    <option value="enginemode3-classes.jar">3 - Chế độ nâng cao (Mới nhất)</option>
                 </select>
             </div>
             <div id="jarList" class="jar-list"></div>
@@ -626,6 +627,11 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            const savedMode = localStorage.getItem('preferredEngineMode');
+            if (savedMode) {
+                const select = document.getElementById('engineModeSelect');
+                if (select) select.value = savedMode;
+            }
             bindGamepadButtons(); loadJars();
             document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && document.getElementById('gameView').classList.contains('visible')) closeEmulator(); });
             window.addEventListener('resize', () => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } });
