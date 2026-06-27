@@ -271,11 +271,12 @@
             <p>Chọn game để chơi</p>
         </div>
             <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:8px"></div>
-        <input id="searchBox" type="text" placeholder="🔍 Tìm game đã tải..." style="
+        <input id="searchBox" type="text" placeholder="🔍 Tìm game đã tải... (nhập ít nhất 3 ký tự)" style="
             width:100%; padding:10px 14px; margin-bottom:12px; border-radius:10px;
             border:1px solid #333; background:#1a1a2e; color:#ddd; font-size:14px;
             outline:none; box-sizing:border-box;
-        " oninput="renderGameList()">
+        " oninput="onSearchInputDebounced()">
+        <div id="searchHint" style="font-size:11px;color:#888;margin:-8px 0 10px 4px;min-height:14px;"></div>
         <div class="filter-row">
             <select id="devFilter" class="filter-select" onchange="renderGameList()"><option value="">Dev: Tất cả</option></select>
             <select id="profileFilter" class="filter-select" onchange="renderGameList()"><option value="">Profile: Tất cả</option></select>
@@ -307,7 +308,6 @@
                     <option value="enginemode3-classes.jar">3 - Chế độ nâng cao (Mới nhất)</option>
                     <option value="enginemode4-freej2me-web">4 - Chế độ dự phòng (freej2me-web)</option>
                 </select>
-                <button id="changeKeysBtn" type="button" style="padding:6px 10px;border-radius:6px;border:1px solid #444;background:#161625;color:#9fe8ff;font-size:12px;cursor:pointer;" onclick="openKeymapModal()">Change key</button>
             </div>
             <div id="jarList" class="jar-list"></div>
         </div>
@@ -426,11 +426,42 @@
         let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotatePromptTimer = null, autoRotateCountdownTimer = null, autoRotateInteractionCleanup = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null, autoRotatePending = false, autoRotateDisabled = false, autoRotateRemaining = 0;
         let dedomilQuery = '', dedomilPage = 1, dedomilHasNext = false, dedomilBusy = false;
         let allGames = [], groupedGames = [], randomRank = new Map();
-        const DEFAULT_RANDOM_LIMIT = 100;
+        const DEFAULT_RANDOM_LIMIT = 10;
+        let searchDebounceTimer = null;
+        const SEARCH_DEBOUNCE_MS = 2000;
+        const SEARCH_MIN_CHARS = 3;
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
         function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
 
-        function filterGames(q) { renderGameList(); }
+        function onSearchInputDebounced() {
+            const box = document.getElementById('searchBox');
+            const hint = document.getElementById('searchHint');
+            const q = (box?.value || '').trim();
+            if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+            if (q.length === 0) {
+                if (hint) hint.textContent = '';
+                renderGameList();
+                return;
+            }
+            if (q.length > 0 && q.length < SEARCH_MIN_CHARS) {
+                if (hint) { hint.textContent = 'Nhập ít nhất ' + SEARCH_MIN_CHARS + ' ký tự để tìm (' + q.length + '/' + SEARCH_MIN_CHARS + ')...'; hint.style.color = '#ffaa55'; }
+                // chưa đủ ký tự -> hiển thị random 10, không filter
+                renderGameList();
+                return;
+            }
+            if (hint) {
+                hint.textContent = 'Đang chờ gõ xong ' + (SEARCH_DEBOUNCE_MS/1000) + 's...';
+                hint.style.color = '#7cc4ff';
+            }
+            searchDebounceTimer = setTimeout(() => {
+                searchDebounceTimer = null;
+                if (hint) { hint.textContent = '✅ Đã tìm "' + q + '"'; hint.style.color = '#00c853'; }
+                renderGameList();
+                setTimeout(() => { if (hint) hint.textContent = ''; }, 1500);
+            }, SEARCH_DEBOUNCE_MS);
+        }
+        // giữ tương thích cũ, filterGames giờ chỉ gọi debounce
+        function filterGames(q) { onSearchInputDebounced(); }
         function populateFilters(data) {
             const devSelect = document.getElementById('devFilter');
             const profileSelect = document.getElementById('profileFilter');
@@ -450,18 +481,29 @@
                 ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
                 : '<div class="game-icon-placeholder">🎮</div>';
         }
+        function getSearchQuery() {
+            return (document.getElementById('searchBox')?.value || '').trim();
+        }
+        function getSearchQueryLower() {
+            const q = getSearchQuery();
+            return q.length >= SEARCH_MIN_CHARS ? q.toLowerCase() : '';
+        }
+        function isSearchActive() {
+            const q = getSearchQuery();
+            return q.length >= SEARCH_MIN_CHARS;
+        }
         function getFilteredGames() {
-            const q = (document.getElementById('searchBox')?.value || '').toLowerCase().trim();
+            const qLower = getSearchQueryLower();
             const dev = document.getElementById('devFilter')?.value || '';
             const profile = document.getElementById('profileFilter')?.value || '';
             return allGames.filter(g => {
-                if (q && !(g.name || '').toLowerCase().includes(q)) return false;
+                if (qLower && !(g.name || '').toLowerCase().includes(qLower)) return false;
                 if (dev && g.dev !== dev) return false;
                 if (profile && g.profile !== profile) return false;
                 return true;
             });
         }
-        function hasTextSearch() { return !!((document.getElementById('searchBox')?.value || '').trim()); }
+        function hasTextSearch() { return isSearchActive(); }
         function assignRandomRanks() {
             randomRank = new Map();
             const keys = [...new Set(allGames.map(g => g.duplicateKey || g.name))];
@@ -493,11 +535,18 @@
             const allGroups = buildGroups(filtered);
             const limited = limitDefaultGroups(allGroups);
             groupedGames = limited.groups;
-            const q = (document.getElementById('searchBox')?.value || '').trim();
+            const qRaw = getSearchQuery();
+            const qActive = isSearchActive();
             const baseStatus = '✅ ' + allGames.length + ' game • ' + limited.totalGroups + ' tên';
-            document.getElementById('status').innerHTML = !q && limited.limited
-                ? baseStatus + ' • đang hiển thị ngẫu nhiên ' + groupedGames.length + ' game — nhập tên vào ô tìm kiếm để hiện game còn lại'
-                : baseStatus + (q ? ' • kết quả tìm kiếm: ' + groupedGames.length : '');
+            let statusHtml = baseStatus;
+            if (qRaw.length > 0 && qRaw.length < SEARCH_MIN_CHARS) {
+                statusHtml += ' • gõ ít nhất ' + SEARCH_MIN_CHARS + ' ký tự để tìm (' + qRaw.length + '/' + SEARCH_MIN_CHARS + ') — đang hiển thị ngẫu nhiên ' + groupedGames.length + ' game';
+            } else if (!qActive && limited.limited) {
+                statusHtml += ' • đang hiển thị ngẫu nhiên ' + groupedGames.length + ' / ' + limited.totalGroups + ' game — nhập ≥' + SEARCH_MIN_CHARS + ' ký tự để tìm';
+            } else if (qActive) {
+                statusHtml += ' • kết quả tìm kiếm "' + escapeHtml(qRaw) + '": ' + groupedGames.length;
+            }
+            document.getElementById('status').innerHTML = statusHtml;
             container.innerHTML = '';
             if (!groupedGames.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
             const frag = document.createDocumentFragment();
