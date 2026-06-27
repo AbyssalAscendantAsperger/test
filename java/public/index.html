@@ -29,6 +29,24 @@
         .game-res { font-size: 9px; color: #555; }
         .play-btn { background: #00d4ff; color: black; border: none; padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; width: 100%; }
 
+        .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .filter-select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #1a1a2e; color: #ddd; font-size: 12px; outline: none; }
+        .meta-line { font-size: 9px; color: #777; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dup-badge { display:inline-block; background:#3a2d4a; color:#e1b6ff; border-radius:10px; padding:1px 6px; font-size:9px; margin-left:4px; }
+        .version-modal { display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.72); align-items:center; justify-content:center; padding:16px; }
+        .version-modal.visible { display:flex; }
+        .version-box { width:min(720px, 96vw); max-height:82vh; overflow:auto; background:#111124; border:1px solid #334; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,0.6); }
+        .version-head { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:1px solid #27273d; }
+        .version-head h3 { flex:1; margin:0; color:#00d4ff; font-size:15px; }
+        .version-close { border:none; background:#ff4757; color:white; border-radius:7px; padding:6px 10px; cursor:pointer; font-weight:bold; }
+        .version-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #222238; cursor:pointer; }
+        .version-row:hover { background:#1a1a32; }
+        .version-row img, .version-row .game-icon-placeholder { flex:0 0 auto; }
+        .version-info { flex:1; min-width:0; }
+        .version-title { color:white; font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .version-meta { color:#999; font-size:11px; margin-top:3px; }
+        .version-play { border:none; background:#00d4ff; color:#001018; border-radius:7px; padding:7px 10px; font-size:12px; font-weight:800; cursor:pointer; }
+
         /* ===== GAME VIEW (Modal) ===== */
         #gameView {
             display: none; position: fixed; inset: 0; background: #0a0a0f; z-index: 9999;
@@ -257,7 +275,11 @@
             width:100%; padding:10px 14px; margin-bottom:12px; border-radius:10px;
             border:1px solid #333; background:#1a1a2e; color:#ddd; font-size:14px;
             outline:none; box-sizing:border-box;
-        " oninput="filterGames(this.value)">
+        " oninput="renderGameList()">
+        <div class="filter-row">
+            <select id="devFilter" class="filter-select" onchange="renderGameList()"><option value="">Dev: Tất cả</option></select>
+            <select id="profileFilter" class="filter-select" onchange="renderGameList()"><option value="">Profile: Tất cả</option></select>
+        </div>
         <div class="dedomil-box">
             <div class="dedomil-row">
                 <input id="dedomilSearchInput" class="dedomil-input" type="text" placeholder="🌐 Tìm trên Dedomil, ví dụ: Ninja" minlength="3">
@@ -369,19 +391,122 @@
         </div>
     </div>
 
+    <div id="versionModal" class="version-modal">
+        <div class="version-box">
+            <div class="version-head">
+                <h3 id="versionTitle">Chọn phiên bản</h3>
+                <button class="version-close" onclick="closeVersionModal()">×</button>
+            </div>
+            <div id="versionList"></div>
+        </div>
+    </div>
+
     <script>
         let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotatePromptTimer = null, autoRotateCountdownTimer = null, autoRotateInteractionCleanup = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null, autoRotatePending = false, autoRotateDisabled = false, autoRotateRemaining = 0;
         let dedomilQuery = '', dedomilPage = 1, dedomilHasNext = false, dedomilBusy = false;
+        let allGames = [], groupedGames = [], randomRank = new Map();
+        const DEFAULT_RANDOM_LIMIT = 100;
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
         function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
 
-        function filterGames(q) {
-            q = q.toLowerCase().trim();
-            document.querySelectorAll('.jar-card').forEach(card => {
-                const name = card.querySelector('.jar-name');
-                card.style.display = (!q || (name && name.textContent.toLowerCase().includes(q))) ? '' : 'none';
+        function filterGames(q) { renderGameList(); }
+        function populateFilters(data) {
+            const devSelect = document.getElementById('devFilter');
+            const profileSelect = document.getElementById('profileFilter');
+            const curDev = devSelect ? devSelect.value : '';
+            const curProfile = profileSelect ? profileSelect.value : '';
+            if (devSelect) {
+                devSelect.innerHTML = '<option value="">Dev: Tất cả</option>' + (data.devs || []).map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>').join('');
+                devSelect.value = curDev;
+            }
+            if (profileSelect) {
+                profileSelect.innerHTML = '<option value="">Profile: Tất cả</option>' + (data.profiles || []).map(p => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>').join('');
+                profileSelect.value = curProfile;
+            }
+        }
+        function iconHtmlFor(game) {
+            return game.hasIcon
+                ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
+                : '<div class="game-icon-placeholder">🎮</div>';
+        }
+        function getFilteredGames() {
+            const q = (document.getElementById('searchBox')?.value || '').toLowerCase().trim();
+            const dev = document.getElementById('devFilter')?.value || '';
+            const profile = document.getElementById('profileFilter')?.value || '';
+            return allGames.filter(g => {
+                if (q && !(g.name || '').toLowerCase().includes(q)) return false;
+                if (dev && g.dev !== dev) return false;
+                if (profile && g.profile !== profile) return false;
+                return true;
             });
         }
+        function hasTextSearch() { return !!((document.getElementById('searchBox')?.value || '').trim()); }
+        function assignRandomRanks() {
+            randomRank = new Map();
+            const keys = [...new Set(allGames.map(g => g.duplicateKey || g.name))];
+            keys.forEach(k => randomRank.set(k, Math.random()));
+        }
+        function limitDefaultGroups(groups) {
+            if (hasTextSearch()) return { groups, limited: false, totalGroups: groups.length };
+            const sorted = groups.slice().sort((a, b) => {
+                const ak = a[0]?.duplicateKey || a[0]?.name || '';
+                const bk = b[0]?.duplicateKey || b[0]?.name || '';
+                return (randomRank.get(ak) ?? Math.random()) - (randomRank.get(bk) ?? Math.random());
+            });
+            return { groups: sorted.slice(0, DEFAULT_RANDOM_LIMIT), limited: sorted.length > DEFAULT_RANDOM_LIMIT, totalGroups: sorted.length };
+        }
+
+        function buildGroups(games) {
+            const map = new Map();
+            games.forEach(g => {
+                const key = g.duplicateKey || g.name;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(g);
+            });
+            return [...map.values()].map(list => list.sort((a,b) => ((a.resolution?.width||0)*(a.resolution?.height||0)) - ((b.resolution?.width||0)*(b.resolution?.height||0))));
+        }
+        function renderGameList() {
+            const container = document.getElementById('jarList');
+            if (!container) return;
+            const filtered = getFilteredGames();
+            const allGroups = buildGroups(filtered);
+            const limited = limitDefaultGroups(allGroups);
+            groupedGames = limited.groups;
+            const q = (document.getElementById('searchBox')?.value || '').trim();
+            const baseStatus = '✅ ' + allGames.length + ' game • ' + limited.totalGroups + ' tên';
+            document.getElementById('status').innerHTML = !q && limited.limited
+                ? baseStatus + ' • đang hiển thị ngẫu nhiên ' + groupedGames.length + ' game — nhập tên vào ô tìm kiếm để hiện game còn lại'
+                : baseStatus + (q ? ' • kết quả tìm kiếm: ' + groupedGames.length : '');
+            container.innerHTML = '';
+            if (!groupedGames.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+            const frag = document.createDocumentFragment();
+            groupedGames.forEach(group => {
+                const game = group[0];
+                const card = document.createElement('div');
+                card.className = 'jar-card';
+                const r = game.resolution;
+                const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + (group.length > 1 ? '<span class="dup-badge">' + group.length + ' bản</span>' : '') + '</div>' : '';
+                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '</div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + '</div>';
+                card.innerHTML = iconHtmlFor(game) + '<div class="game-info"><div class="jar-name">' + escapeHtml(game.name) + '</div>' + resBadge + meta + '<button class="play-btn">▶ Chơi</button></div>';
+                card.onclick = () => { if (group.length > 1) openVersionModal(group); else launchGame(game.id, game.name); };
+                frag.appendChild(card);
+            });
+            container.appendChild(frag);
+        }
+        function openVersionModal(group) {
+            const modal = document.getElementById('versionModal');
+            const list = document.getElementById('versionList');
+            const title = document.getElementById('versionTitle');
+            if (!modal || !list) return;
+            if (title) title.textContent = 'Chọn phiên bản: ' + (group[0]?.name || 'Game');
+            list.innerHTML = group.map(g => {
+                const r = g.resolution;
+                const meta = (r ? r.width + '×' + r.height : '?') + ' • Dev: ' + escapeHtml(g.dev || 'Unknown') + ' • ' + escapeHtml(g.profile || 'Unknown') + (g.version ? ' • v' + escapeHtml(g.version) : '');
+                return '<div class="version-row" onclick="closeVersionModal(); launchGame(\'' + escapeHtml(g.id) + '\', \'' + escapeHtml(g.name).replace(/'/g, '&#39;') + '\')">' + iconHtmlFor(g) + '<div class="version-info"><div class="version-title">' + escapeHtml(g.name) + '</div><div class="version-meta">' + meta + '</div></div><button class="version-play">Chơi</button></div>';
+            }).join('');
+            modal.classList.add('visible');
+        }
+        function closeVersionModal() { document.getElementById('versionModal')?.classList.remove('visible'); }
 
         async function loadJars() {
             const container = document.getElementById('jarList');
@@ -389,20 +514,10 @@
                 const res = await fetch('/api/jars');
                 const data = await res.json();
                 if (data.error || !data.games?.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
-                document.getElementById('status').innerHTML = '✅ ' + data.games.length + ' game';
-                container.innerHTML = '';
-                data.games.forEach(game => {
-                    const card = document.createElement('div');
-                    card.className = 'jar-card';
-                    let iconHtml = game.hasIcon
-                        ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
-                        : '<div class="game-icon-placeholder">🎮</div>';
-                    const r = game.resolution;
-                    const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + '</div>' : '';
-                    card.innerHTML = iconHtml + '<div class="game-info"><div class="jar-name">' + game.name + '</div>' + resBadge + '<button class="play-btn">▶ Chơi</button></div>';
-                    card.onclick = () => launchGame(game.id, game.name);
-                    container.appendChild(card);
-                });
+                allGames = data.games || [];
+                assignRandomRanks();
+                populateFilters(data);
+                renderGameList();
             } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server</div>'; }
         }
 

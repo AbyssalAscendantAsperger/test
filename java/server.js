@@ -106,15 +106,44 @@ function mimeOf(filename) {
 // Đọc metadata từ JAR: tên game theo MANIFEST + icon.
 // Ưu tiên MIDlet-Name/MIDlet-1 để tránh hiển thị tên file JAR xấu.
 function unfoldManifest(text) {
-  return text.replace(/\r?\n[ \t]/g, '');
+  return text.replace(/\r\n[ \t]|\n[ \t]|\r[ \t]/g, '');
 }
 function parseManifest(text) {
   const attrs = {};
-  unfoldManifest(text).split(/\r?\n/).forEach(line => {
+  unfoldManifest(text).split(/\r\n|\n|\r/).forEach(line => {
     const i = line.indexOf(':');
     if (i > 0) attrs[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
   });
   return attrs;
+}
+function scoreManifestText(text) {
+  let score = 0;
+  score += (text.match(/\uFFFD/g) || []).length * 20;
+  score += (text.match(/[ÃÂ][\x80-\xBF\w]?/g) || []).length * 4;
+  score += (text.match(/â[\x80-\xBF]/g) || []).length * 4;
+  return score;
+}
+function decodeManifestBuffer(buf) {
+  const utf8 = buf.toString('utf8');
+  const latin1 = buf.toString('latin1');
+  return scoreManifestText(utf8) <= scoreManifestText(latin1) ? utf8 : latin1;
+}
+function cleanManifestText(value) {
+  let s = String(value || '');
+  s = s.replace(/https?:\/\/(?:www\.)?waptai\.com\/?/gi, ' ');
+  s = s.replace(/\b(?:www\.)?waptai\.com\b/gi, ' ');
+  s = s.replace(/\[(?:\s|\]|\[|\(|\))*\]/g, ' ');
+  s = s.replace(/[\[\]()]+/g, ' ');
+  s = s.replace(/\s*[-–—_|]+\s*$/g, '');
+  s = s.replace(/^\s*[-–—_|]+\s*/g, '');
+  s = s.replace(/[\x00-\x1F]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s;
+}
+function normalizeDuplicateKey(name) {
+  return cleanManifestText(name)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 function extractJarMetadata(jarPath) {
   let buffer;
@@ -125,10 +154,13 @@ function extractJarMetadata(jarPath) {
   let iconPath = null;
   let gameName = null;
   let manifest = {};
+  let dev = '';
+  let profile = '';
+  let version = '';
   const mf = dir['META-INF/MANIFEST.MF'] || dir['meta-inf/manifest.mf'];
   if (mf) {
     try {
-      const text = decompressEntry(mf).toString('latin1');
+      const text = decodeManifestBuffer(decompressEntry(mf));
       manifest = parseManifest(text);
       if (manifest['midlet-name']) gameName = manifest['midlet-name'];
       const midlet1 = manifest['midlet-1'];
@@ -136,6 +168,11 @@ function extractJarMetadata(jarPath) {
         const parts = midlet1.split(',').map(x => x.trim());
         if (parts[0]) gameName = parts[0];
       }
+      dev = cleanManifestText(manifest['midlet-vendor'] || '');
+      profile = cleanManifestText(manifest['microedition-profile'] || '');
+      const pm = profile.match(/MIDP-\d+(?:\.\d+)?/i);
+      if (pm) profile = pm[0].toUpperCase();
+      version = cleanManifestText(manifest['midlet-version'] || '');
       iconPath = manifest['midlet-icon'] || null;
       if (!iconPath && midlet1) {
         const parts = midlet1.split(',').map(x => x.trim());
@@ -162,8 +199,8 @@ function extractJarMetadata(jarPath) {
       try { icon = { mime: mimeOf(f), buffer: decompressEntry(dir[f]) }; break; } catch (e) {}
     }
   }
-  if (gameName) gameName = gameName.replace(/[\x00-\x1F]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return { name: gameName || null, icon, manifest };
+  if (gameName) gameName = cleanManifestText(gameName);
+  return { name: gameName || null, icon, manifest, dev, profile, version, duplicateKey: normalizeDuplicateKey(gameName || '') };
 }
 function extractIcon(jarPath) {
   return extractJarMetadata(jarPath).icon;
@@ -198,11 +235,12 @@ function buildGameRegistry() {
     const gameId = 'g' + crypto.createHash('sha1').update(file).digest('hex').slice(0, 14);
     const fileNameFallback = file.replace(/\.jar$/i, '').replace(/[_-]+/g, ' ').trim();
     const fullPath = path.join(JAR_DIR, file);
-    let meta = { name: null, icon: null };
+    let meta = { name: null, icon: null, dev: '', profile: '', version: '', duplicateKey: '' };
     try { meta = extractJarMetadata(fullPath); } catch (e) {}
-    const name = meta.name || fileNameFallback;
+    const name = meta.name || cleanManifestText(fileNameFallback);
     const resolution = extractResolution(file);
-    gameRegistry.set(gameId, { name, file, fullPath, icon: meta.icon, resolution });
+    const duplicateKey = meta.duplicateKey || normalizeDuplicateKey(name);
+    gameRegistry.set(gameId, { name, file, fullPath, icon: meta.icon, resolution, dev: meta.dev || 'Unknown', profile: meta.profile || 'Unknown', version: meta.version || '', duplicateKey });
   });
 }
 
@@ -519,11 +557,17 @@ app.use('/api/save', express.text({ type: 'text/plain', limit: '200mb' }));
 app.get('/api/jars', (req, res) => {
   try {
     rebuildGameRegistryIfNeeded(); // cập nhật nếu có game mới/xóa
+    const counts = new Map();
+    for (const g of gameRegistry.values()) counts.set(g.duplicateKey, (counts.get(g.duplicateKey) || 0) + 1);
     const games = [...gameRegistry.entries()].map(([id, g]) => ({
-      id, name: g.name, hasIcon: !!g.icon, resolution: g.resolution
+      id, name: g.name, dev: g.dev, profile: g.profile, version: g.version,
+      duplicateKey: g.duplicateKey, duplicateCount: counts.get(g.duplicateKey) || 1,
+      hasIcon: !!g.icon, resolution: g.resolution
     }));
-    games.sort((a, b) => a.name.localeCompare(b.name));
-    res.json({ games });
+    games.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    const devs = [...new Set(games.map(g => g.dev).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'vi'));
+    const profiles = [...new Set(games.map(g => g.profile).filter(Boolean))].sort();
+    res.json({ games, devs, profiles });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
