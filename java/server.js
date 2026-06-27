@@ -14,6 +14,8 @@ const JAVA_DIR = __dirname;   // Thư mục emulator gốc (chính là project/j
 const JAR_DIR = path.join(JAVA_DIR, 'jar');
 const SAVES_DIR = path.join(JAVA_DIR, 'saves');        // Lưu save game theo phiên/user
 fs.mkdirSync(SAVES_DIR, { recursive: true });
+const FALLBACK_APPS_DIR = path.join(JAVA_DIR, 'web', 'apps');
+fs.mkdirSync(FALLBACK_APPS_DIR, { recursive: true });
 
 // === SESSION: mỗi trình duyệt/user 1 sid (cookie) -> 1 file save riêng ===
 function parseCookies(req) {
@@ -54,6 +56,8 @@ app.use((req, res, next) => {
 
 // Middleware: phục vụ Portal (public/)
 app.use(express.static(path.join(__dirname, 'public')));
+// Fallback web runtime (freej2me-web)
+app.use('/web', express.static(path.join(__dirname, 'web'), { acceptRanges: true }));
 
 // ==================== TRÍCH XUẤT ICON TỪ JAR ====================
 // JAR = file ZIP. Tự viết bộ đọc Central Directory (Node thuần + zlib).
@@ -204,6 +208,117 @@ function extractJarMetadata(jarPath) {
 }
 function extractIcon(jarPath) {
   return extractJarMetadata(jarPath).icon;
+}
+
+function sanitizeFallbackAppId(gameId) {
+  return String(gameId || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+function crc32(buf) {
+  let c = 0 ^ (-1);
+  for (let i = 0; i < buf.length; i++) {
+    c = (c >>> 8) ^ CRC32_TABLE[(c ^ buf[i]) & 0xFF];
+  }
+  return (c ^ (-1)) >>> 0;
+}
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+function dosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = ((date.getHours() & 31) << 11) | ((date.getMinutes() & 63) << 5) | ((Math.floor(date.getSeconds() / 2)) & 31);
+  const dosDate = (((year - 1980) & 127) << 9) | (((date.getMonth() + 1) & 15) << 5) | (date.getDate() & 31);
+  return { dosTime, dosDate };
+}
+function createZipBuffer(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  const { dosTime, dosDate } = dosDateTime();
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name.replace(/\\/g, '/'), 'utf8');
+    const dataBuf = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data);
+    const compressed = zlib.deflateRawSync(dataBuf);
+    const crc = crc32(dataBuf);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(dosTime, 10);
+    local.writeUInt16LE(dosDate, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(compressed.length, 18);
+    local.writeUInt32LE(dataBuf.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, nameBuf, compressed);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt16LE(dosTime, 12);
+    central.writeUInt16LE(dosDate, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(dataBuf.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, nameBuf);
+
+    offset += local.length + nameBuf.length + compressed.length;
+  }
+  const centralDir = Buffer.concat(centralParts);
+  const localDir = Buffer.concat(localParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDir.length, 12);
+  end.writeUInt32LE(localDir.length, 16);
+  end.writeUInt16LE(0, 20);
+  return Buffer.concat([localDir, centralDir, end]);
+}
+function ensureFallbackBundleForGame(gameId) {
+  const game = gameRegistry.get(gameId);
+  if (!game) return null;
+  const appId = sanitizeFallbackAppId(gameId);
+  const bundlePath = path.join(FALLBACK_APPS_DIR, `${appId}.zip`);
+  if (fs.existsSync(bundlePath)) return { appId, bundlePath, created: false };
+  const settings = [
+    `width:${game.resolution.width}`,
+    `height:${game.resolution.height}`,
+    `phone:Nokia`
+  ].join('\n') + '\n';
+  const zipBuffer = createZipBuffer([
+    { name: 'app.jar', data: fs.readFileSync(game.fullPath) },
+    { name: 'settings.txt', data: Buffer.from(settings, 'utf8') },
+    { name: 'name.txt', data: Buffer.from(String(game.name || appId) + '\n', 'utf8') },
+    { name: 'id.txt', data: Buffer.from(appId + '\n', 'utf8') }
+  ]);
+  fs.writeFileSync(bundlePath, zipBuffer);
+  return { appId, bundlePath, created: true };
+}
+function getFallbackBundleStatus(gameId) {
+  const appId = sanitizeFallbackAppId(gameId);
+  const bundlePath = path.join(FALLBACK_APPS_DIR, `${appId}.zip`);
+  return { appId, bundlePath, exists: fs.existsSync(bundlePath) };
 }
 
 // ==================== ANTI-LEAK JAR ====================
@@ -600,10 +715,25 @@ app.get('/api/launch', (req, res) => {
   let modeParam = enginemode; 
   if (!modeParam) modeParam = 'enginemode2-classes2.jar';
 
+  if (modeParam === 'enginemode4-freej2me-web') {
+    try {
+      const bundle = ensureFallbackBundleForGame(id);
+      if (bundle && bundle.appId) {
+        const debugKeys = String(req.query.debugkeys || '') === '1' ? '&debugkeys=1' : '';
+      const fallbackUrl = `/web/run.html?app=${encodeURIComponent(bundle.appId)}&fractionScale=1&nokeypad=1${debugKeys}`; 
+        return res.json({ success: true, url: fallbackUrl, resolution: r, engine: 'freej2me-web', appId: bundle.appId, bundleCreated: !!bundle.created });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: 'Không thể tạo fallback bundle', detail: String(e && e.message || e) });
+    }
+    const launcherUrl = `/web/index.html?mobile=1&fractionScale=1`;
+    return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
+  }
+
   // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
   const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
   
-  res.json({ success: true, url: emulatorUrl, resolution: r });
+  res.json({ success: true, url: emulatorUrl, resolution: r, engine: 'legacy' });
 });
 
 // API: Tải save của 1 game trong phiên/user hiện tại
@@ -636,6 +766,30 @@ app.post('/api/save', (req, res) => {
   res.json({ ok: true, sid, gameId, size: Buffer.byteLength(body) });
 });
 
+app.post('/api/fallback/prepare', (req, res) => {
+  if (!rateLimitCheck(req.sid)) {
+    return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
+  }
+  rebuildGameRegistryIfNeeded();
+  const gameId = req.query.id;
+  const game = gameRegistry.get(gameId);
+  if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
+  try {
+    const bundle = ensureFallbackBundleForGame(gameId);
+    return res.json({ ok: true, gameId, appId: bundle.appId, bundlePath: path.relative(JAVA_DIR, bundle.bundlePath), created: !!bundle.created, status: getFallbackBundleStatus(gameId) });
+  } catch (e) {
+    return res.status(500).json({ error: 'Không thể tạo fallback bundle', detail: String(e && e.message || e) });
+  }
+});
+
+app.get('/api/fallback/status', (req, res) => {
+  rebuildGameRegistryIfNeeded();
+  const gameId = req.query.id;
+  const game = gameRegistry.get(gameId);
+  if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
+  return res.json({ ok: true, gameId, ...getFallbackBundleStatus(gameId) });
+});
+
 // Trang chính
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -661,5 +815,8 @@ module.exports = {
   searchDedomil,
   downloadDedomilGame,
   rebuildGameRegistryIfNeeded,
-  gameRegistry
+  gameRegistry,
+  ensureFallbackBundleForGame,
+  getFallbackBundleStatus,
+  sanitizeFallbackAppId
 };

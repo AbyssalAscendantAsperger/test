@@ -4,7 +4,8 @@
   "description": "J2ME Portal - Quét JAR và chạy bằng iframe emulator",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "prepare:fallback": "node tools/prepare_fallback_bundle.js"
   },
   "dependencies": {
     "express": "^4.22.2"
