@@ -73,6 +73,20 @@
         .emulator-frame:focus { outline: none; }
         .screen-frame, .screen-area { outline: none; -webkit-tap-highlight-color: transparent; }
 
+        .rotate-prompt {
+            display: none; position: absolute; inset: 0; z-index: 20;
+            align-items: center; justify-content: center; text-align: center;
+            background: rgba(0,0,0,0.58); color: #fff; padding: 16px;
+            font-size: 15px; font-weight: 700; line-height: 1.45;
+            pointer-events: none;
+        }
+        .rotate-prompt.visible { display: flex; }
+        .rotate-prompt-box {
+            background: rgba(10,10,20,0.92); border: 1px solid #00d4ff;
+            border-radius: 12px; padding: 12px 16px; box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+        }
+        .rotate-prompt small { display: block; margin-top: 6px; color: #bbb; font-size: 11px; font-weight: 500; }
+
         /* ===== VIRTUAL GAMEPAD — Fluid vw-based ===== */
         .gamepad {
             display: none; padding: 1.5vw 0 2vw; flex: 0 0 auto;
@@ -260,6 +274,12 @@
             <div class="screen-area" id="screenArea">
                 <div class="screen-frame" id="screenFrame">
                     <iframe id="emulatorFrame" class="emulator-frame"></iframe>
+                    <div id="rotatePrompt" class="rotate-prompt" aria-live="polite">
+                        <div class="rotate-prompt-box">
+                            <div id="rotatePromptText">Xoay game sau 5 giây...</div>
+                            <small>Nhấn phím, chạm hoặc click bất kỳ để hủy tự xoay</small>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="gamepad" id="gamepad">
@@ -320,7 +340,7 @@
     </div>
 
     <script>
-        let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null;
+        let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotatePromptTimer = null, autoRotateCountdownTimer = null, autoRotateInteractionCleanup = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null, autoRotatePending = false, autoRotateDisabled = false, autoRotateRemaining = 0;
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
         function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
 
@@ -373,6 +393,9 @@
             currentGameId = gameId;
             closing = false;
             gameReady = false;
+            autoRotateDisabled = false;
+            cancelAutoRotatePrompt();
+            stopAutoRotateInteractionWatch();
             document.getElementById('saveStatus').textContent = '⏳';
             try {
                 await loadSaveFromServer(gameId);
@@ -387,6 +410,7 @@
                         hookExit(currentFrame);
                         startAutosave();
                         startAutoFit();
+                        startAutoRotateInteractionWatch(currentFrame);
                         startAutoRotate();
                         gameReady = true;
                         currentFrame.focus();
@@ -436,20 +460,79 @@
             });
         }
 
-        function rotateGame() {
+        function updateRotatePromptText() {
+            const el = document.getElementById('rotatePromptText');
+            if (el) el.textContent = 'Phát hiện cần xoay màn hình. Xoay game sau ' + autoRotateRemaining + ' giây...';
+        }
+        function cancelAutoRotatePrompt() {
+            if (autoRotatePromptTimer) { clearTimeout(autoRotatePromptTimer); autoRotatePromptTimer = null; }
+            if (autoRotateCountdownTimer) { clearInterval(autoRotateCountdownTimer); autoRotateCountdownTimer = null; }
+            autoRotatePending = false;
+            const prompt = document.getElementById('rotatePrompt');
+            if (prompt) prompt.classList.remove('visible');
+        }
+        function disableAutoRotateByUser() {
             if (!currentFrame || closing) return;
+            autoRotateDisabled = true;
+            cancelAutoRotatePrompt();
+            stopAutoRotate();
+        }
+        function startAutoRotateInteractionWatch(iframe) {
+            stopAutoRotateInteractionWatch();
+            const events = ['keydown', 'mousedown', 'pointerdown', 'touchstart', 'wheel'];
+            const handler = function(e) {
+                if (!currentFrame || closing) return;
+                disableAutoRotateByUser();
+            };
+            const targets = [document, window];
+            try {
+                if (iframe && iframe.contentWindow) targets.push(iframe.contentWindow);
+                if (iframe && iframe.contentWindow && iframe.contentWindow.document) targets.push(iframe.contentWindow.document);
+            } catch(e) {}
+            targets.forEach(t => events.forEach(ev => { try { t.addEventListener(ev, handler, { capture: true, passive: true }); } catch(e) {} }));
+            autoRotateInteractionCleanup = function() {
+                targets.forEach(t => events.forEach(ev => { try { t.removeEventListener(ev, handler, true); } catch(e) {} }));
+            };
+        }
+        function stopAutoRotateInteractionWatch() {
+            if (autoRotateInteractionCleanup) { autoRotateInteractionCleanup(); autoRotateInteractionCleanup = null; }
+        }
+        function requestAutoRotate() {
+            if (autoRotateDisabled || autoRotatePending || !currentFrame || closing) return;
+            stopAutoRotate();
+            autoRotatePending = true;
+            autoRotateRemaining = 5;
+            updateRotatePromptText();
+            const prompt = document.getElementById('rotatePrompt');
+            if (prompt) prompt.classList.add('visible');
+            autoRotateCountdownTimer = setInterval(() => {
+                autoRotateRemaining--;
+                if (autoRotateRemaining < 0) autoRotateRemaining = 0;
+                updateRotatePromptText();
+            }, 1000);
+            autoRotatePromptTimer = setTimeout(() => {
+                if (!autoRotatePending || autoRotateDisabled || !currentFrame || closing) return;
+                cancelAutoRotatePrompt();
+                rotateGame(false);
+            }, 5000);
+        }
+        function rotateGame(manual = true) {
+            if (!currentFrame || closing) return;
+            const wasAutoRotateDisabled = autoRotateDisabled;
+            if (manual) disableAutoRotateByUser();
+            else autoRotateDisabled = true; // tự xoay chỉ chạy 1 lần, tránh vòng lặp reload liên tục
+            cancelAutoRotatePrompt();
             const m = currentFrame.src.match(/canvasSize=size-(\d+)x(\d+)/);
             if (!m) return;
             gameReady = false;
             currentFrame.src = currentFrame.src.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=size-' + m[2] + 'x' + m[1]);
             stopAutoRotate(); startAutoFit();
-            // Restart auto-rotate after iframe reloads
-            setTimeout(() => { gameReady = true; startAutoRotate(); }, 3000);
+            return { before: m[1] + 'x' + m[2], after: m[2] + 'x' + m[1], autoRotateDisabled: wasAutoRotateDisabled };
         }
-        function startAutoRotate() { stopAutoRotate(); autoRotateTimer = setInterval(() => { if (!currentFrame || closing) { stopAutoRotate(); return; } autoDetectOrientation(); }, 2000); }
+        function startAutoRotate() { if (autoRotateDisabled || autoRotatePending) return; stopAutoRotate(); autoRotateTimer = setInterval(() => { if (!currentFrame || closing || autoRotateDisabled) { stopAutoRotate(); return; } autoDetectOrientation(); }, 2000); }
         function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
         function autoDetectOrientation() {
-            if (!currentFrame || closing) return;
+            if (!currentFrame || closing || autoRotateDisabled || autoRotatePending) return;
             try {
                 const doc = currentFrame.contentWindow && currentFrame.contentWindow.document; if (!doc) return;
                 const canvas = doc.getElementById('canvas'); if (!canvas || !canvas.width || !canvas.height) return;
@@ -457,7 +540,7 @@
                 const w = canvas.width, h = canvas.height; let q = [0,0,0,0], total = 0;
                 for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) { const d = ctx.getImageData(x, y, 1, 1).data; const bg = (d[0]<8&&d[1]<8&&d[2]<8) || (d[0]>247&&d[1]>247&&d[2]>247); if (!bg) { q[(x<w/2?0:1)+(y<h/2?0:2)]++; total++; } }
                 if (total < 50) return;
-                if (total / ((w/2)*(h/2)) < 0.55) { const tc=q[0]+q[1], bc=q[2]+q[3], lc=q[0]+q[2], rc=q[1]+q[3]; if (h>w && tc>0 && bc<tc*0.25) { rotateGame(); return; } if (w>h && lc>0 && rc<lc*0.25) { rotateGame(); return; } }
+                if (total / ((w/2)*(h/2)) < 0.55) { const tc=q[0]+q[1], bc=q[2]+q[3], lc=q[0]+q[2], rc=q[1]+q[3]; if (h>w && tc>0 && bc<tc*0.25) { requestAutoRotate(); return; } if (w>h && lc>0 && rc<lc*0.25) { requestAutoRotate(); return; } }
             } catch(e) {}
         }
 
@@ -537,7 +620,7 @@
         async function handleGameExit(reason) {
             if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate(); cancelAutoRotatePrompt(); stopAutoRotateInteractionWatch();
             const win = currentFrame.contentWindow;
             const frame = currentFrame;
             const gameId = currentGameId;
@@ -605,7 +688,7 @@
         async function closeEmulator() {
             if (closing || !currentFrame) return;
             closing = true;
-            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate();
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate(); cancelAutoRotatePrompt(); stopAutoRotateInteractionWatch();
             const win = currentFrame.contentWindow;
             const frame = currentFrame;
             const gameId = currentGameId;
