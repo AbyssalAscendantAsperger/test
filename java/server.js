@@ -307,13 +307,16 @@ app.get('/api/launch', (req, res) => {
     return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
   }
   rebuildGameRegistryIfNeeded(); // cập nhật nếu có game mới/xóa trước khi tìm
-  const { id } = req.query;
+  const { id, enginemode } = req.query;
   const game = gameRegistry.get(id);
   if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
   const token = issueToken(id);
   const r = game.resolution;
   const canvasSize = `size-${r.width}x${r.height}`;
-  const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}`;
+  let emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}`;
+  if (enginemode) {
+    emulatorUrl += `&enginemode=${encodeURIComponent(enginemode)}`;
+  }
   res.json({ success: true, url: emulatorUrl, resolution: r });
 });
 

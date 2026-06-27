@@ -229,6 +229,17 @@
             outline:none; box-sizing:border-box;
         " oninput="filterGames(this.value)">
         <div class="jar-list-wrap">
+            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <label for="engineModeSelect" style="font-size: 13px; color: #aaa;">Chế độ:</label>
+                <select id="engineModeSelect" style="
+                    flex: 1; padding: 8px; border-radius: 8px;
+                    border: 1px solid #333; background: #1a1a2e; color: #ddd; font-size: 13px;
+                    outline: none;
+                ">
+                    <option value="enginemode1-classesold.jar">1 - Tương thích (Ổn định)</option>
+                    <option value="enginemode2-classes2.jar" selected>2 - Tiêu chuẩn (Nhanh)</option>
+                </select>
+            </div>
             <div id="jarList" class="jar-list"></div>
         </div>
     </div>
@@ -364,7 +375,8 @@
             document.getElementById('saveStatus').textContent = '⏳';
             try {
                 await loadSaveFromServer(gameId);
-                const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId));
+                const engineMode = document.getElementById('engineModeSelect').value;
+                const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId) + '&enginemode=' + encodeURIComponent(engineMode));
                 const data = await r.json();
                 if (data.success) {
                     currentFrame.src = data.url;

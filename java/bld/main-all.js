@@ -7037,7 +7037,12 @@ if (typeof module !== "undefined" && module.exports) {
     delete waitingNativeEventQueue[isolateId];
   }
   function sendVirtualKeyboardEvent() {
-    FG.sendNativeEventToForeground({type:VIRTUAL_KEYBOARD_EVENT, intParam1:0, intParam2:0, intParam3:0}, true);
+    // [PATCH] no-op: ngăn NPE "classInfo is null" trong handleVirtualKeyboardEvent()
+    // khi viewport resize (thanh địa chỉ mobile ẩn/hiện, game setFullScreen...).
+    // Event type 58 (VIRTUAL_KEYBOARD_EVENT) dispatch lỗi với Canvas game (Tankzors)
+    // → crash EventQueue → game treo vĩnh viễn. Vì Portal dùng MIDP.sendKeyPress
+    // (KEY_EVENT) trực tiếp + có bàn phím ảo riêng, virtual-keyboard event KHÔNG cần.
+    return;
   }
   function sendRotationEvent() {
     FG.sendNativeEventToForeground({type:ROTATION_EVENT, intParam1:0, intParam2:0, intParam3:0}, true);
@@ -14464,4 +14469,4 @@ window.onload = function() {
   }); 
 
 }; 
-var profiler =undefined; 
+var profiler =undefined; ss
