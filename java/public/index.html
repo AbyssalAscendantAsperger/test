@@ -227,6 +227,22 @@
 
         .nokia-sep { width: 50%; height: 1px; background: #1a1a22; margin: 0.5vw 0; border: none; }
         .nokia-brand { color: #2a2a2a; font-size: 1.6vw; font-weight: 700; letter-spacing: 1vw; text-transform: uppercase; }
+
+        .dedomil-box { margin-bottom: 12px; background: #16162a; border: 1px solid #30304a; border-radius: 10px; padding: 10px; }
+        .dedomil-row { display: flex; gap: 6px; align-items: center; }
+        .dedomil-input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 7px; border: 1px solid #444; background: #0f0f1a; color: #ddd; font-size: 13px; outline: none; }
+        .dedomil-btn { border: none; border-radius: 7px; background: #00d4ff; color: #001018; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+        .dedomil-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .dedomil-cancel { background: #3a2d2d; color: #ffaaa8; }
+        .dedomil-results { margin-top: 8px; display: none; max-height: 210px; overflow-y: auto; border-top: 1px solid #28283d; padding-top: 6px; }
+        .dedomil-results.visible { display: block; }
+        .dedomil-item { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 1px solid #242438; }
+        .dedomil-title { flex: 1; min-width: 0; color: #fff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dedomil-date { color: #777; font-size: 10px; margin-left: 5px; }
+        .dedomil-download { border: none; border-radius: 6px; background: #2d4a3a; color: #7cffcc; padding: 6px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+        .dedomil-download:disabled { opacity: 0.5; cursor: wait; }
+        .dedomil-status { margin-top: 6px; color: #aaa; font-size: 11px; min-height: 14px; }
+        .dedomil-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -237,11 +253,25 @@
             <p>Chọn game để chơi</p>
         </div>
             <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:8px"></div>
-        <input id="searchBox" type="text" placeholder="🔍 Tìm game..." style="
+        <input id="searchBox" type="text" placeholder="🔍 Tìm game đã tải..." style="
             width:100%; padding:10px 14px; margin-bottom:12px; border-radius:10px;
             border:1px solid #333; background:#1a1a2e; color:#ddd; font-size:14px;
             outline:none; box-sizing:border-box;
         " oninput="filterGames(this.value)">
+        <div class="dedomil-box">
+            <div class="dedomil-row">
+                <input id="dedomilSearchInput" class="dedomil-input" type="text" placeholder="🌐 Tìm trên Dedomil, ví dụ: Ninja" minlength="3">
+                <button id="dedomilSearchBtn" class="dedomil-btn" onclick="searchDedomilGames(1)">Tìm</button>
+                <button id="dedomilClearBtn" class="dedomil-btn dedomil-cancel" onclick="clearDedomilSearch()" style="display:none">Hủy</button>
+            </div>
+            <div id="dedomilStatus" class="dedomil-status">Dedomil yêu cầu từ khóa ít nhất 3 ký tự.</div>
+            <div id="dedomilResults" class="dedomil-results"></div>
+            <div id="dedomilPager" class="dedomil-pager" style="display:none">
+                <button id="dedomilPrevBtn" class="dedomil-btn" onclick="searchDedomilGames(dedomilPage - 1)">‹ Trước</button>
+                <span id="dedomilPageLabel" style="font-size:12px;color:#888">Trang 1</span>
+                <button id="dedomilNextBtn" class="dedomil-btn" onclick="searchDedomilGames(dedomilPage + 1)">Tiếp ›</button>
+            </div>
+        </div>
         <div class="jar-list-wrap">
             <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; background: #1a1a2e; padding: 10px; border-radius: 10px; border: 1px solid #333;">
                 <label for="engineModeSelect" style="font-size: 13px; color: #00d4ff; font-weight: bold;">Chế độ Engine:</label>
@@ -341,6 +371,7 @@
 
     <script>
         let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotatePromptTimer = null, autoRotateCountdownTimer = null, autoRotateInteractionCleanup = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null, autoRotatePending = false, autoRotateDisabled = false, autoRotateRemaining = 0;
+        let dedomilQuery = '', dedomilPage = 1, dedomilHasNext = false, dedomilBusy = false;
         function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
         function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
 
@@ -373,6 +404,89 @@
                     container.appendChild(card);
                 });
             } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server</div>'; }
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+        }
+        function setDedomilStatus(text, isError) {
+            const el = document.getElementById('dedomilStatus');
+            if (el) { el.textContent = text || ''; el.style.color = isError ? '#ff6b6b' : '#aaa'; }
+        }
+        function renderDedomilResults(results) {
+            const box = document.getElementById('dedomilResults');
+            if (!box) return;
+            if (!results || !results.length) {
+                box.classList.add('visible');
+                box.innerHTML = '<div style="color:#888;font-size:12px;padding:8px">Không có kết quả.</div>';
+                return;
+            }
+            box.classList.add('visible');
+            box.innerHTML = results.map(g => '<div class="dedomil-item">' +
+                '<div class="dedomil-title">' + escapeHtml(g.title) + '<span class="dedomil-date">' + escapeHtml(g.date || '') + '</span></div>' +
+                '<button class="dedomil-download" onclick="downloadDedomilGame(\'' + encodeURIComponent(g.id) + '\', this)">Tải</button>' +
+                '</div>').join('');
+        }
+        function updateDedomilPager() {
+            const pager = document.getElementById('dedomilPager');
+            const clearBtn = document.getElementById('dedomilClearBtn');
+            if (pager) pager.style.display = dedomilQuery ? 'flex' : 'none';
+            if (clearBtn) clearBtn.style.display = dedomilQuery ? '' : 'none';
+            const prev = document.getElementById('dedomilPrevBtn');
+            const next = document.getElementById('dedomilNextBtn');
+            const label = document.getElementById('dedomilPageLabel');
+            if (prev) prev.disabled = dedomilBusy || dedomilPage <= 1;
+            if (next) next.disabled = dedomilBusy || !dedomilHasNext;
+            if (label) label.textContent = 'Trang ' + dedomilPage;
+        }
+        function clearDedomilSearch() {
+            dedomilQuery = ''; dedomilPage = 1; dedomilHasNext = false; dedomilBusy = false;
+            const input = document.getElementById('dedomilSearchInput'); if (input) input.value = '';
+            const results = document.getElementById('dedomilResults'); if (results) { results.classList.remove('visible'); results.innerHTML = ''; }
+            setDedomilStatus('Dedomil yêu cầu từ khóa ít nhất 3 ký tự.');
+            updateDedomilPager();
+        }
+        async function searchDedomilGames(page) {
+            if (dedomilBusy) return;
+            const input = document.getElementById('dedomilSearchInput');
+            const q = (input && input.value || '').trim();
+            if (q.length < 3) { setDedomilStatus('Dedomil yêu cầu từ khóa ít nhất 3 ký tự.', true); return; }
+            dedomilBusy = true; dedomilQuery = q; dedomilPage = Math.max(1, page || 1); updateDedomilPager();
+            const btn = document.getElementById('dedomilSearchBtn'); if (btn) btn.disabled = true;
+            setDedomilStatus('Đang tìm trên Dedomil...');
+            try {
+                const res = await fetch('/api/dedomil/search?q=' + encodeURIComponent(q) + '&page=' + encodeURIComponent(dedomilPage));
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Lỗi tìm kiếm');
+                dedomilHasNext = !!data.hasNext;
+                renderDedomilResults(data.results || []);
+                const hidden = data.filteredUnsupported ? ' Đã ẩn ' + data.filteredUnsupported + ' mục không có bản JAR/màn hình hỗ trợ.' : '';
+                setDedomilStatus('Tìm thấy ' + ((data.results || []).length) + ' game tải được ở trang ' + data.page + '.' + hidden + ' Chọn Tải để tự lấy bản phù hợp nhất.');
+            } catch(e) {
+                dedomilHasNext = false;
+                renderDedomilResults([]);
+                setDedomilStatus(e.message || 'Lỗi tìm kiếm Dedomil', true);
+            } finally {
+                dedomilBusy = false; if (btn) btn.disabled = false; updateDedomilPager();
+            }
+        }
+        async function downloadDedomilGame(encodedId, btn) {
+            const id = decodeURIComponent(encodedId);
+            if (btn) { btn.disabled = true; btn.textContent = 'Đang tải...'; }
+            setDedomilStatus('Đang phân tích phiên bản và tải JAR từ Dedomil...');
+            try {
+                const res = await fetch('/api/dedomil/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Tải thất bại');
+                setDedomilStatus('✅ Đã tải ' + data.title + ' (' + data.resolution + ') → ' + data.file);
+                await loadJars();
+                const searchBox = document.getElementById('searchBox'); if (searchBox) { searchBox.value = ''; filterGames(''); }
+                setTimeout(() => clearDedomilSearch(), 800);
+            } catch(e) {
+                setDedomilStatus('❌ ' + (e.message || 'Tải thất bại'), true);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Tải'; }
+            }
         }
 
         async function launchGame(gameId, gameName) {
@@ -716,6 +830,8 @@
                 if (select) select.value = savedMode;
             }
             bindGamepadButtons(); loadJars();
+            const dedomilInput = document.getElementById('dedomilSearchInput');
+            if (dedomilInput) dedomilInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') searchDedomilGames(1); });
             document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && document.getElementById('gameView').classList.contains('visible')) closeEmulator(); });
             window.addEventListener('resize', () => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } });
             window.addEventListener('orientationchange', () => { setTimeout(() => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } }, 300); });

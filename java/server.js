@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const http = require('http');
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -101,45 +103,70 @@ function mimeOf(filename) {
   if (ext === '.bmp') return 'image/bmp';
   return 'application/octet-stream';
 }
-// Trích xuất icon: ưu tiên theo MANIFEST, fallback tìm ảnh đầu tiên (ưu tiên tên có "icon")
-function extractIcon(jarPath) {
+// Đọc metadata từ JAR: tên game theo MANIFEST + icon.
+// Ưu tiên MIDlet-Name/MIDlet-1 để tránh hiển thị tên file JAR xấu.
+function unfoldManifest(text) {
+  return text.replace(/\r?\n[ \t]/g, '');
+}
+function parseManifest(text) {
+  const attrs = {};
+  unfoldManifest(text).split(/\r?\n/).forEach(line => {
+    const i = line.indexOf(':');
+    if (i > 0) attrs[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+  });
+  return attrs;
+}
+function extractJarMetadata(jarPath) {
   let buffer;
-  try { buffer = fs.readFileSync(jarPath); } catch (e) { return null; }
+  try { buffer = fs.readFileSync(jarPath); } catch (e) { return { name: null, icon: null, manifest: {} }; }
   const dir = readZipEntries(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
-  if (!dir) return null;
-  // 1) Đọc MANIFEST.MF để tìm icon chính thức
+  if (!dir) return { name: null, icon: null, manifest: {} };
+
   let iconPath = null;
-  const mf = dir['META-INF/MANIFEST.MF'];
+  let gameName = null;
+  let manifest = {};
+  const mf = dir['META-INF/MANIFEST.MF'] || dir['meta-inf/manifest.mf'];
   if (mf) {
     try {
       const text = decompressEntry(mf).toString('latin1');
-      // MIDlet-Icon: /icon.png
-      const m1 = text.match(/MIDlet-Icon\s*:\s*(.+)/i);
-      if (m1) iconPath = m1[1].trim();
-      // MIDlet-1: Tên, /icon.png, Class  (lấy field thứ 2)
-      if (!iconPath) {
-        const m2 = text.match(/MIDlet-\d+\s*:\s*[^,]*,\s*([^,]+)/i);
-        if (m2 && m2[1].trim()) iconPath = m2[1].trim();
+      manifest = parseManifest(text);
+      if (manifest['midlet-name']) gameName = manifest['midlet-name'];
+      const midlet1 = manifest['midlet-1'];
+      if (!gameName && midlet1) {
+        const parts = midlet1.split(',').map(x => x.trim());
+        if (parts[0]) gameName = parts[0];
+      }
+      iconPath = manifest['midlet-icon'] || null;
+      if (!iconPath && midlet1) {
+        const parts = midlet1.split(',').map(x => x.trim());
+        if (parts[1]) iconPath = parts[1];
       }
     } catch (e) {}
   }
+
+  let icon = null;
   if (iconPath) {
     iconPath = iconPath.replace(/^\//, '');
     if (dir[iconPath]) {
-      try { return { mime: mimeOf(iconPath), buffer: decompressEntry(dir[iconPath]) }; } catch (e) {}
+      try { icon = { mime: mimeOf(iconPath), buffer: decompressEntry(dir[iconPath]) }; } catch (e) {}
     }
   }
-  // 2) Fallback: tìm file ảnh đầu tiên (ưu tiên tên chứa icon/logo)
-  const imgExt = /\.(png|jpg|jpeg|gif|bmp)$/i;
-  const imgs = Object.keys(dir).filter(imgExt.test.bind(imgExt));
-  imgs.sort((a, b) => {
-    const score = f => (/icon|logo/i.test(f) ? 0 : 1);
-    return score(a) - score(b);
-  });
-  for (const f of imgs) {
-    try { return { mime: mimeOf(f), buffer: decompressEntry(dir[f]) }; } catch (e) {}
+  if (!icon) {
+    const imgExt = /\.(png|jpg|jpeg|gif|bmp)$/i;
+    const imgs = Object.keys(dir).filter(imgExt.test.bind(imgExt));
+    imgs.sort((a, b) => {
+      const score = f => (/icon|logo/i.test(f) ? 0 : 1);
+      return score(a) - score(b);
+    });
+    for (const f of imgs) {
+      try { icon = { mime: mimeOf(f), buffer: decompressEntry(dir[f]) }; break; } catch (e) {}
+    }
   }
-  return null;
+  if (gameName) gameName = gameName.replace(/[\x00-\x1F]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return { name: gameName || null, icon, manifest };
+}
+function extractIcon(jarPath) {
+  return extractJarMetadata(jarPath).icon;
 }
 
 // ==================== ANTI-LEAK JAR ====================
@@ -169,12 +196,13 @@ function buildGameRegistry() {
   files.forEach((file) => {
     // gameId ổn định theo tên file, không phụ thuộc vào thứ tự/số lượng file
     const gameId = 'g' + crypto.createHash('sha1').update(file).digest('hex').slice(0, 14);
-    const name = file.replace(/\.jar$/i, '').replace(/[_-]+/g, ' ').trim();
+    const fileNameFallback = file.replace(/\.jar$/i, '').replace(/[_-]+/g, ' ').trim();
     const fullPath = path.join(JAR_DIR, file);
-    let icon = null;
-    try { icon = extractIcon(fullPath); } catch (e) {}
+    let meta = { name: null, icon: null };
+    try { meta = extractJarMetadata(fullPath); } catch (e) {}
+    const name = meta.name || fileNameFallback;
     const resolution = extractResolution(file);
-    gameRegistry.set(gameId, { name, file, fullPath, icon, resolution });
+    gameRegistry.set(gameId, { name, file, fullPath, icon: meta.icon, resolution });
   });
 }
 
@@ -281,6 +309,209 @@ app.use('/emu/jar', (req, res) => res.status(403).send('Forbidden'));
 //    QUAN TRỌNG: đặt SAU các route /emu/jar/* ở trên -> thư mục jar/ thật không bị static phục vụ trực tiếp
 app.use('/emu', express.static(JAVA_DIR));
 
+
+// ==================== DEDOMIL SEARCH + DOWNLOAD ====================
+// Ghi chú: Dedomil yêu cầu từ khóa >= 3 ký tự. Website có bộ đếm "Today search"
+// nhưng không công bố quota/rate-limit chính thức; vì vậy server giới hạn nhẹ để tránh spam.
+const DEDOMIL_BASE = 'http://dedomil.net';
+const dedomilLog = new Map();
+function dedomilRateLimit(sid) {
+  const now = Date.now();
+  const arr = (dedomilLog.get(sid) || []).filter(t => now - t < 60 * 1000);
+  if (arr.length >= 20) return false;
+  arr.push(now); dedomilLog.set(sid, arr); return true;
+}
+function htmlDecode(str) {
+  return String(str || '')
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
+}
+function stripTags(str) { return htmlDecode(String(str || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim(); }
+function absoluteDedomilUrl(u) { return new URL(u, DEDOMIL_BASE).toString(); }
+function fetchUrlBuffer(url, opts = {}, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const lib = u.protocol === 'https:' ? https : http;
+    const req = lib.request(u, {
+      method: opts.method || 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (J2ME Portal; Dedomil downloader)',
+        'Accept': opts.accept || '*/*',
+        'Referer': opts.referer || DEDOMIL_BASE + '/games',
+        ...(opts.headers || {})
+      },
+      timeout: opts.timeout || 20000
+    }, res => {
+      const code = res.statusCode || 0;
+      if ([301,302,303,307,308].includes(code) && res.headers.location && redirectCount < 5) {
+        res.resume();
+        return resolve(fetchUrlBuffer(new URL(res.headers.location, url).toString(), opts, redirectCount + 1));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ status: code, url, finalUrl: res.responseUrl || url, headers: res.headers, buffer: Buffer.concat(chunks) }));
+    });
+    req.on('timeout', () => req.destroy(new Error('Timeout')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+async function fetchUrlText(url, opts = {}) {
+  const r = await fetchUrlBuffer(url, { ...opts, accept: 'text/html,application/xhtml+xml' });
+  if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}`);
+  return r.buffer.toString('utf8');
+}
+function parseDedomilSearch(html, query, page) {
+  const results = [];
+  const seen = new Set();
+  const re = /<a\s+[^>]*href=["']\/games\/(\d+)\/screens["'][^>]*>([\s\S]*?)<\/a>\s*([^<\n\r]*)/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    results.push({ id, title: stripTags(m[2]), date: stripTags(m[3]), url: `${DEDOMIL_BASE}/games/${id}` });
+  }
+  const hasNext = new RegExp(`/games/search/${escapeRegExp(encodeURIComponent(query)).replace(/%20/g, '(?:%20|\\+)')}/page/${Number(page)+1}`, 'i').test(html) || />\s*next»\s*<\/a>/i.test(html);
+  const lastPageMatch = html.match(/\/games\/search\/[^"']+\/page\/(\d+)["'][^>]*>»»/i);
+  return { results, page: Number(page), hasNext, lastPage: lastPageMatch ? Number(lastPageMatch[1]) : null };
+}
+function escapeRegExp(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function parseDedomilVersions(html, gameId) {
+  const versions = [];
+  const titleMatch = html.match(/<div[^>]+class=["']NHRY["'][^>]*>([\s\S]*?)<\/div>/i) || html.match(/<title>Download\s+([\s\S]*?)\s+Java Game/i);
+  const gameTitle = titleMatch ? stripTags(titleMatch[1]) : `Dedomil ${gameId}`;
+  const blockRe = /<div[^>]+class=["']MODELS["'][^>]*>([\s\S]*?)<\/div>\s*<div[^>]+class=["']LOAD["'][^>]*>([\s\S]*?)<\/div>/gi;
+  let m;
+  while ((m = blockRe.exec(html))) {
+    const modelText = stripTags(m[1]);
+    const loadHtml = m[2];
+    const resMatch = modelText.match(/(\d{2,4})\s*[x×]\s*(\d{2,4})/i);
+    if (!resMatch) continue;
+    const width = parseInt(resMatch[1], 10), height = parseInt(resMatch[2], 10);
+    const links = [];
+    loadHtml.replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
+      links.push({ href: absoluteDedomilUrl(href), text: stripTags(text) }); return '';
+    });
+    const jarLink = links.find(l => /download-jar/i.test(l.href) || /^jar$/i.test(l.text));
+    const anyDownload = links.find(l => /download/i.test(l.href) || /download/i.test(l.text));
+    const sizeMatch = stripTags(loadHtml).match(/([\d.]+)\s*(kB|MB)/i);
+    versions.push({
+      width, height, resolution: `${width}x${height}`, model: modelText.replace(/\s*\(\s*\d{2,4}\s*[x×]\s*\d{2,4}\s*\)\s*$/, ''),
+      jarUrl: jarLink ? jarLink.href : null,
+      downloadUrl: (jarLink || anyDownload || links[0] || {}).href || null,
+      size: sizeMatch ? sizeMatch[0] : ''
+    });
+  }
+  return { gameTitle, versions };
+}
+const DEDOMIL_SUPPORTED_RES = new Set(['240x320','320x240','360x640','640x360','320x480','480x320','240x400','400x240','176x220','220x176','128x160','160x128']);
+const DEDOMIL_RES_PREF = ['240x320','320x240','360x640','640x360','320x480','480x320','240x400','400x240','176x220','220x176','128x160','160x128'];
+function chooseDedomilVersion(versions) {
+  const supported = versions.filter(v => DEDOMIL_SUPPORTED_RES.has(v.resolution));
+  const pool = supported.length ? supported : versions.filter(v => v.width >= 128 && v.width <= 800 && v.height >= 128 && v.height <= 800);
+  for (const res of DEDOMIL_RES_PREF) {
+    const found = pool.find(v => v.resolution === res && v.downloadUrl);
+    if (found) return found;
+  }
+  return pool.filter(v => v.downloadUrl).sort((a,b) => (b.width*b.height) - (a.width*a.height))[0] || null;
+}
+function safeFileName(name) {
+  return String(name || 'game').replace(/[\\/:*?"<>|\x00-\x1F]/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^\.+/, '').slice(0, 120) || 'game';
+}
+function uniqueJarPath(baseName) {
+  let name = safeFileName(baseName).replace(/\.jar$/i, '') + '.jar';
+  let full = path.join(JAR_DIR, name);
+  let i = 2;
+  while (fs.existsSync(full)) {
+    name = safeFileName(baseName).replace(/\.jar$/i, '') + `_${i}.jar`;
+    full = path.join(JAR_DIR, name);
+    i++;
+  }
+  return { name, full };
+}
+function contentDispositionFilename(cd) {
+  if (!cd) return null;
+  const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  return m ? decodeURIComponent(m[1] || m[2]) : null;
+}
+function extractFirstJarFromZip(buffer) {
+  const dir = readZipEntries(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+  if (!dir) return null;
+  const jarName = Object.keys(dir).find(f => /\.jar$/i.test(f));
+  if (!jarName) return null;
+  return { name: path.basename(jarName), buffer: decompressEntry(dir[jarName]) };
+}
+async function searchDedomil(query, page = 1, opts = {}) {
+  query = String(query || '').trim();
+  page = Math.max(1, Math.min(50, parseInt(page, 10) || 1));
+  if (query.length < 3) throw new Error('Dedomil yêu cầu từ khóa ít nhất 3 ký tự');
+  const url = `${DEDOMIL_BASE}/games/search/${encodeURIComponent(query)}/page/${page}`;
+  const html = await fetchUrlText(url);
+  const parsed = parseDedomilSearch(html, query, page);
+  // Enrich kết quả bằng cách đọc trang chi tiết: nhiều kết quả Dedomil có trang mô tả
+  // nhưng không còn link JAR. Với Portal, ẩn các mục không tải được để người dùng
+  // không gặp lỗi "Không tìm thấy bản tải có độ phân giải được hỗ trợ" ngay khi bấm Tải.
+  if (opts.downloadableOnly !== false) {
+    const enriched = await Promise.all(parsed.results.map(async r => {
+      try {
+        const detailHtml = await fetchUrlText(`${DEDOMIL_BASE}/games/${r.id}`);
+        const versions = parseDedomilVersions(detailHtml, r.id).versions;
+        const best = chooseDedomilVersion(versions);
+        return { ...r, downloadable: !!best, bestResolution: best ? best.resolution : null, versionCount: versions.length };
+      } catch (e) {
+        return { ...r, downloadable: false, bestResolution: null, versionCount: 0 };
+      }
+    }));
+    parsed.totalFound = parsed.results.length;
+    parsed.results = enriched.filter(r => r.downloadable);
+    parsed.filteredUnsupported = parsed.totalFound - parsed.results.length;
+  }
+  return parsed;
+}
+async function downloadDedomilGame(gameId) {
+  if (!/^\d{1,10}$/.test(String(gameId))) throw new Error('gameId không hợp lệ');
+  const pageUrl = `${DEDOMIL_BASE}/games/${gameId}`;
+  const html = await fetchUrlText(pageUrl);
+  const parsed = parseDedomilVersions(html, gameId);
+  const selected = chooseDedomilVersion(parsed.versions);
+  if (!selected) throw new Error('Không tìm thấy bản tải có độ phân giải được hỗ trợ');
+  const downloadUrl = selected.jarUrl || selected.downloadUrl;
+  const r = await fetchUrlBuffer(downloadUrl, { referer: pageUrl });
+  if (r.status < 200 || r.status >= 300) throw new Error(`Tải thất bại HTTP ${r.status}`);
+  let jarBuffer = r.buffer;
+  let remoteName = contentDispositionFilename(r.headers['content-disposition']);
+  const ctype = String(r.headers['content-type'] || '').toLowerCase();
+  if (!/\.jar$/i.test(remoteName || '') && (ctype.includes('zip') || (jarBuffer[0] === 0x50 && jarBuffer[1] === 0x4b))) {
+    const inner = extractFirstJarFromZip(jarBuffer);
+    if (inner) { jarBuffer = inner.buffer; remoteName = inner.name; }
+  }
+  if (!jarBuffer || jarBuffer.length < 4 || jarBuffer[0] !== 0x50 || jarBuffer[1] !== 0x4b) {
+    throw new Error('File tải về không phải JAR/ZIP hợp lệ');
+  }
+  const baseName = remoteName || `${parsed.gameTitle}_${selected.resolution}.jar`;
+  const target = uniqueJarPath(baseName);
+  fs.mkdirSync(JAR_DIR, { recursive: true });
+  fs.writeFileSync(target.full, jarBuffer);
+  rebuildGameRegistryIfNeeded();
+  return { ok: true, gameId: String(gameId), title: parsed.gameTitle, file: target.name, resolution: selected.resolution, model: selected.model, size: jarBuffer.length };
+}
+
+app.get('/api/dedomil/search', async (req, res) => {
+  try {
+    if (!dedomilRateLimit(req.sid)) return res.status(429).json({ error: 'Tìm kiếm quá nhanh, vui lòng đợi một lát.' });
+    res.json(await searchDedomil(req.query.q, req.query.page));
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/dedomil/download', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    if (!dedomilRateLimit(req.sid)) return res.status(429).json({ error: 'Tải quá nhanh, vui lòng đợi một lát.' });
+    res.json(await downloadDedomilGame(req.body && req.body.id));
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 // Nhận body save dạng text (JSON)
 app.use('/api/save', express.text({ type: 'text/plain', limit: '200mb' }));
 
@@ -367,9 +598,24 @@ app.get('/', (req, res) => {
 });
 
 // === KHỞI ĐỘNG SERVER (chỉ 1 server ở port 3000) ===
-app.listen(PORT, () => {
-  console.log(`✅ J2ME Portal đang chạy tại http://localhost:${PORT}`);
-  console.log(`🔒 Anti-leak: ${gameRegistry.size} game đã đăng ký (tên file được ẩn)`);
-  console.log(`💾 Save theo game và phiên tại: ${SAVES_DIR}`);
-  console.log(`🚀 Chỉ cần gõ: npm start`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ J2ME Portal đang chạy tại http://localhost:${PORT}`);
+    console.log(`🔒 Anti-leak: ${gameRegistry.size} game đã đăng ký (tên file được ẩn)`);
+    console.log(`💾 Save theo game và phiên tại: ${SAVES_DIR}`);
+    console.log(`🚀 Chỉ cần gõ: npm start`);
+  });
+}
+
+module.exports = {
+  app,
+  extractJarMetadata,
+  extractResolution,
+  parseDedomilSearch,
+  parseDedomilVersions,
+  chooseDedomilVersion,
+  searchDedomil,
+  downloadDedomilGame,
+  rebuildGameRegistryIfNeeded,
+  gameRegistry
+};
