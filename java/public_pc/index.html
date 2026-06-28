@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>J2ME Portal — PC</title>
+    <meta name="x-platform" content="pc">
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0f0f1a; color: #ddd;
+            user-select: none; -webkit-user-select: none; overscroll-behavior: none;
+        }
+
+        /* ===== GALLERY (trang chọn game) ===== */
+        #gallery { height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+        .header { text-align: center; margin-bottom: 16px; }
+        .header h1 { color: #00d4ff; font-size: 24px; }
+        .header p { color: #888; font-size: 12px; margin-top: 4px; }
+        .jar-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .jar-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; padding-bottom: 20px; }
+        .jar-card { background: #1a1a2e; border-radius: 12px; padding: 12px; border: 1px solid #333; cursor: pointer; display: flex; gap: 10px; align-items: center; transition: 0.2s; }
+        .jar-card:hover { border-color: #00d4ff; transform: translateY(-2px); }
+        .game-icon { width: 40px; height: 40px; border-radius: 8px; background: #0a0a1e; object-fit: contain; image-rendering: pixelated; }
+        .game-icon-placeholder { width: 40px; height: 40px; border-radius: 8px; background: #0a0a1e; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .game-info { flex: 1; min-width: 0; }
+        .jar-name { color: white; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .game-res { font-size: 9px; color: #555; }
+        .play-btn { background: #00d4ff; color: black; border: none; padding: 5px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 11px; margin-top: 4px; width: 100%; }
+
+        .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .filter-select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #1a1a2e; color: #ddd; font-size: 12px; outline: none; }
+        .meta-line { font-size: 9px; color: #777; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dup-badge { display:inline-block; background:#3a2d4a; color:#e1b6ff; border-radius:10px; padding:1px 6px; font-size:9px; margin-left:4px; }
+        .version-modal { display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.72); align-items:center; justify-content:center; padding:16px; }
+        .version-modal.visible { display:flex; }
+        .version-box { width:min(720px, 96vw); max-height:82vh; overflow:auto; background:#111124; border:1px solid #334; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,0.6); }
+        .version-head { display:flex; align-items:center; gap:8px; padding:12px; border-bottom:1px solid #27273d; }
+        .version-head h3 { flex:1; margin:0; color:#00d4ff; font-size:15px; }
+        .version-close { border:none; background:#ff4757; color:white; border-radius:7px; padding:6px 10px; cursor:pointer; font-weight:bold; }
+        .version-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid #222238; cursor:pointer; }
+        .version-row:hover { background:#1a1a32; }
+        .version-row img, .version-row .game-icon-placeholder { flex:0 0 auto; }
+        .version-info { flex:1; min-width:0; }
+        .version-title { color:white; font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .version-meta { color:#999; font-size:11px; margin-top:3px; }
+        .version-play { border:none; background:#00d4ff; color:#001018; border-radius:7px; padding:7px 10px; font-size:12px; font-weight:800; cursor:pointer; }
+
+        /* ===== GAME VIEW (Modal) ===== */
+        #gameView {
+            display: none; position: fixed; inset: 0; background: #0a0a0f; z-index: 9999;
+            flex-direction: column;
+        }
+        #gameView.visible { display: flex; }
+        .modal-header {
+            background: #0e0e16; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+            flex: 0 0 auto; height: 32px; border-bottom: 1px solid #1a1a2e;
+        }
+        .modal-header h3 { color: #00d4ff; font-size: 11px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .save-status { color: #00c853; font-size: 10px; max-width: 60px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hdr-btn { border: none; width: 26px; height: 26px; border-radius: 5px; cursor: pointer; font-size: 13px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; }
+        .close-btn { background: #ff4757; color: white; }
+        .save-btn { background: #2d4a2d; color: #6cff6c; }
+        .rotate-btn { background: #2d3a4a; color: #7cc4ff; }
+        .pad-btn { background: #3a2d4a; color: #cc7cff; }
+        .pad-btn.active { background: #5a4a6a; }
+        .fs-btn { background: #2d4a3a; color: #7cffcc; }
+
+        /* Vùng chứa game + gamepad */
+        .game-body {
+            flex: 1 1 auto; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden;
+        }
+        /* screen-area: vùng đệm CHỐT CỨNG không gian, không bị ảnh hưởng bởi iframe */
+        .screen-area {
+            flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+            min-height: 0; overflow: hidden; padding: 4px;
+        }
+        /* screen-frame: khung đen bao quanh game, có kích thước pixel CHÍNH XÁC */
+        .screen-frame {
+            background: #000; border: 3px solid #1a1a2e; border-radius: 8px;
+            flex: 0 0 auto; position: relative; overflow: hidden;
+        }
+        /* iframe: nằm trong screen-frame, scale bằng transform-origin top-left */
+        .emulator-frame {
+            display: block; border: none; transform-origin: top left; background: #000;
+            outline: none; -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+        }
+        .emulator-frame:focus { outline: none; }
+        .screen-frame, .screen-area { outline: none; -webkit-tap-highlight-color: transparent; }
+
+        .rotate-prompt {
+            display: none; position: absolute; inset: 0; z-index: 20;
+            align-items: center; justify-content: center; text-align: center;
+            background: rgba(0,0,0,0.58); color: #fff; padding: 16px;
+            font-size: 15px; font-weight: 700; line-height: 1.45;
+            pointer-events: none;
+        }
+        .rotate-prompt.visible { display: flex; }
+        .rotate-prompt-box {
+            background: rgba(10,10,20,0.92); border: 1px solid #00d4ff;
+            border-radius: 12px; padding: 12px 16px; box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+        }
+        .rotate-prompt small { display: block; margin-top: 6px; color: #bbb; font-size: 11px; font-weight: 500; }
+
+        /* ===== VIRTUAL GAMEPAD — Fluid vw-based ===== */
+        .gamepad {
+            display: none; padding: 1.5vw 0 2vw; flex: 0 0 auto;
+            flex-direction: column; align-items: center; gap: 0;
+            touch-action: none; width: 100%;
+            background: #0a0a0f;
+            border-top: 1px solid #1a1a22;
+        }
+        .gamepad.visible { display: flex; }
+        .gp-top { display: flex; flex-direction: column; align-items: center; gap: 1vw; width: 100%; }
+
+        .nokia-body {
+            width: 100%; padding: 1vw 0 1.5vw;
+            background: transparent;
+            display: flex; flex-direction: column; align-items: center; gap: 1vw;
+        }
+
+        /* ─── Soft keys ─── */
+        .soft-row {
+            display: flex; width: 100%; justify-content: center; align-items: center;
+            gap: 2vw; padding: 0;
+        }
+        .soft-key {
+            flex: 0 1 auto; min-width: 12vw; height: 5.5vw; border-radius: 3vw;
+            background: linear-gradient(180deg, #252525, #1a1a1a);
+            color: #8a8a9a; border: 1px solid #333;
+            font-size: 2.4vw; font-weight: 700; letter-spacing: 0.5vw;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+            transition: all 0.06s ease;
+        }
+        .soft-key:active, .soft-key.pressed {
+            background: linear-gradient(180deg, #1a1a1a, #282828);
+            transform: scale(0.92);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 2px 6px rgba(0,0,0,0.5);
+            color: #bbb;
+        }
+
+        /* ─── D-PAD wheel ─── */
+        .dpad-wheel-wrap {
+            width: 44vw; height: 44vw; max-width: 180px; max-height: 180px;
+            position: relative; margin: 1vw 0;
+        }
+        .dpad-bg-circle {
+            position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 96%; height: 96%; border-radius: 50%;
+            background: #141414; border: 1.5px solid #2a2a2a;
+            z-index: 0;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .dpad-seg {
+            position: absolute;
+            background: linear-gradient(180deg, #222, #181818);
+            border: 1.5px solid #333;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            color: #6a8abb;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+            transition: all 0.06s ease;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            overflow: hidden;
+        }
+        .dpad-seg:active, .dpad-seg.pressed {
+            background: linear-gradient(180deg, #181818, #2a2a2a);
+            box-shadow: inset 0 4px 10px rgba(0,0,0,0.6);
+            color: #a0d0ff; z-index: 5;
+        }
+        .dpad-seg .seg-icon { font-size: 4vw; font-weight: bold; line-height: 1; }
+        .dpad-seg .seg-key { font-size: 1.8vw; color: #444; font-weight: 700; letter-spacing: 0.3vw; }
+        .seg-up {
+            top: 0; left: 50%; transform: translateX(-50%);
+            width: 64%; height: 26%;
+            clip-path: polygon(5% 0%, 95% 0%, 70% 100%, 30% 100%);
+        }
+        .seg-down {
+            bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 64%; height: 26%;
+            clip-path: polygon(30% 0%, 70% 0%, 95% 100%, 5% 100%);
+        }
+        .seg-left {
+            left: 0; top: 50%; transform: translateY(-50%);
+            width: 26%; height: 64%;
+            clip-path: polygon(0% 5%, 100% 30%, 100% 70%, 0% 95%);
+        }
+        .seg-right {
+            right: 0; top: 50%; transform: translateY(-50%);
+            width: 26%; height: 64%;
+            clip-path: polygon(0% 30%, 100% 5%, 100% 95%, 0% 70%);
+        }
+        .dpad-ok {
+            position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 30%; height: 30%; border-radius: 50%;
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            color: #7acc9a; border: 2px solid #3a3a3a;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer; z-index: 10;
+            font-weight: 800; line-height: 1;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.08);
+            transition: all 0.06s ease;
+        }
+        .dpad-ok .ok-label { font-size: 2.8vw; letter-spacing: 0.3vw; }
+        .dpad-ok .wasd-label { font-size: 1.6vw; color: #555; letter-spacing: 0.2vw; }
+        .dpad-ok:active, .dpad-ok.pressed {
+            background: linear-gradient(145deg, #1e3a2e, #143028);
+            transform: translate(-50%, -50%) scale(0.92);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.9), inset 0 3px 8px rgba(0,0,0,0.4);
+            color: #90ffc8;
+        }
+
+        /* ─── NUMPAD ─── */
+        .numpad-wrap { width: 100%; padding: 0; display: flex; justify-content: center; }
+        .numpad {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 1.2vw; width: 75vw; max-width: 280px;
+        }
+        .num-btn {
+            height: 7.5vw; border-radius: 2vw;
+            background: linear-gradient(180deg, #222, #161616);
+            color: #c8c8d0; border: 1px solid #333;
+            font-size: 3.2vw; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            transition: all 0.06s ease;
+        }
+        .num-btn:active, .num-btn.pressed {
+            background: linear-gradient(180deg, #1a1a1a, #2a2a2a);
+            transform: scale(0.93);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 3px 6px rgba(0,0,0,0.5);
+            color: #fff;
+        }
+        .game-btns { display: none; }
+        .game-btn { display: none; }
+
+        .nokia-sep { width: 50%; height: 1px; background: #1a1a22; margin: 0.5vw 0; border: none; }
+        .nokia-brand { color: #2a2a2a; font-size: 1.6vw; font-weight: 700; letter-spacing: 1vw; text-transform: uppercase; }
+
+        .dedomil-box { margin-bottom: 12px; background: #16162a; border: 1px solid #30304a; border-radius: 10px; padding: 10px; }
+        .dedomil-row { display: flex; gap: 6px; align-items: center; }
+        .dedomil-input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 7px; border: 1px solid #444; background: #0f0f1a; color: #ddd; font-size: 13px; outline: none; }
+        .dedomil-btn { border: none; border-radius: 7px; background: #00d4ff; color: #001018; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+        .dedomil-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .dedomil-cancel { background: #3a2d2d; color: #ffaaa8; }
+        .dedomil-results { margin-top: 8px; display: none; max-height: 210px; overflow-y: auto; border-top: 1px solid #28283d; padding-top: 6px; }
+        .dedomil-results.visible { display: block; }
+        .dedomil-item { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 1px solid #242438; }
+        .dedomil-title { flex: 1; min-width: 0; color: #fff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dedomil-date { color: #777; font-size: 10px; margin-left: 5px; }
+        .dedomil-download { border: none; border-radius: 6px; background: #2d4a3a; color: #7cffcc; padding: 6px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+        .dedomil-download:disabled { opacity: 0.5; cursor: wait; }
+        .dedomil-status { margin-top: 6px; color: #aaa; font-size: 11px; min-height: 14px; }
+        .dedomil-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <!-- GALLERY -->
+    <div id="gallery">
+        <div class="header">
+            <h1>🎮 J2ME Portal</h1>
+            <p>Chọn game để chơi</p>
+        </div>
+            <div id="status" style="text-align:center;color:#00c853;font-size:12px;margin-bottom:8px"></div>
+        <input id="searchBox" type="text" placeholder="🔍 Tìm game đã tải... (nhập ít nhất 3 ký tự)" style="
+            width:100%; padding:10px 14px; margin-bottom:12px; border-radius:10px;
+            border:1px solid #333; background:#1a1a2e; color:#ddd; font-size:14px;
+            outline:none; box-sizing:border-box;
+        " oninput="onSearchInputDebounced()">
+        <div id="searchHint" style="font-size:11px;color:#888;margin:-8px 0 10px 4px;min-height:14px;"></div>
+        <div class="filter-row">
+            <select id="devFilter" class="filter-select" onchange="renderGameList()"><option value="">Dev: Tất cả</option></select>
+            <select id="profileFilter" class="filter-select" onchange="renderGameList()"><option value="">Profile: Tất cả</option></select>
+        </div>
+        <div class="dedomil-box">
+            <div class="dedomil-row">
+                <input id="dedomilSearchInput" class="dedomil-input" type="text" placeholder="🌐 Tìm trên Dedomil, ví dụ: Ninja" minlength="3">
+                <button id="dedomilSearchBtn" class="dedomil-btn" onclick="searchDedomilGames(1)">Tìm</button>
+                <button id="dedomilClearBtn" class="dedomil-btn dedomil-cancel" onclick="clearDedomilSearch()" style="display:none">Hủy</button>
+            </div>
+            <div id="dedomilStatus" class="dedomil-status">Dedomil yêu cầu từ khóa ít nhất 3 ký tự.</div>
+            <div id="dedomilResults" class="dedomil-results"></div>
+            <div id="dedomilPager" class="dedomil-pager" style="display:none">
+                <button id="dedomilPrevBtn" class="dedomil-btn" onclick="searchDedomilGames(dedomilPage - 1)">‹ Trước</button>
+                <span id="dedomilPageLabel" style="font-size:12px;color:#888">Trang 1</span>
+                <button id="dedomilNextBtn" class="dedomil-btn" onclick="searchDedomilGames(dedomilPage + 1)">Tiếp ›</button>
+            </div>
+        </div>
+        <div class="jar-list-wrap">
+            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; background: #1a1a2e; padding: 10px; border-radius: 10px; border: 1px solid #333;">
+                <label for="engineModeSelect" style="font-size: 13px; color: #00d4ff; font-weight: bold;">Chế độ Engine:</label>
+                <select id="engineModeSelect" style="
+                    flex: 1; padding: 6px; border-radius: 6px;
+                    border: 1px solid #444; background: #0f0f1a; color: #ddd; font-size: 13px;
+                    outline: none;
+                " onchange="localStorage.setItem('preferredEngineMode', this.value)">
+                    <option value="enginemode1-classesold.jar">1 - Chế độ tương thích (Ổn định)</option>
+                    <option value="enginemode2-classes2.jar" selected>2 - Chế độ tiêu chuẩn (Nhanh)</option>
+                    <option value="enginemode3-classes.jar">3 - Chế độ nâng cao (Mới nhất)</option>
+                    <option value="enginemode4-freej2me-web">4 - Chế độ dự phòng (freej2me-web)</option>
+                </select>
+            </div>
+            <div id="jarList" class="jar-list"></div>
+        </div>
+    </div>
+
+    <div id="keymapModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:16px;">
+        <div style="width:min(760px,96vw);max-height:90vh;overflow:auto;background:#121826;color:#e8eefc;border:1px solid #334;border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.45);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:#9fe8ff;">Change key mapping</div>
+                    <div style="font-size:12px;color:#9fb0d1;">Bấm vào một ô, rồi nhấn 1 phím bàn phím để map lại.</div>
+                </div>
+                <button type="button" onclick="closeKeymapModal()" style="padding:8px 12px;border-radius:8px;border:1px solid #445;background:#1b2334;color:#fff;cursor:pointer;">Đóng</button>
+            </div>
+            <div id="keymapCaptureHint" style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:#182033;color:#b8c7e6;font-size:13px;">Chưa chọn ô nào.</div>
+            <div id="keymapGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;"></div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                <button type="button" onclick="resetKeymapDraft()" style="padding:10px 14px;border-radius:8px;border:1px solid #554;background:#2b1f1f;color:#ffd4d4;cursor:pointer;">Reset mặc định</button>
+                <button type="button" onclick="closeKeymapModal()" style="padding:10px 14px;border-radius:8px;border:1px solid #445;background:#1b2334;color:#fff;cursor:pointer;">Huỷ bỏ</button>
+                <button type="button" onclick="applyKeymapDraft()" style="padding:10px 14px;border-radius:8px;border:1px solid #2d6;background:#17351f;color:#baffc4;cursor:pointer;">Áp dụng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME VIEW -->
+    <div id="gameView">
+        <div class="modal-header">
+            <h3 id="modalTitle">Game</h3>
+            <span id="saveStatus" class="save-status">💾</span>
+            <button class="hdr-btn save-btn" title="Lưu" onclick="exportSave(currentFrame && currentFrame.contentWindow, currentGameId, false)">💾</button>
+            <button class="hdr-btn rotate-btn" title="Xoay" onclick="rotateGame()">↻</button>
+            <button class="hdr-btn pad-btn" id="padToggle" title="Bàn phím" onclick="toggleGamepad()">📱</button>
+            <button class="hdr-btn fs-btn" title="Toàn màn hình" onclick="toggleFullscreen()">⛶</button>
+            <button class="hdr-btn close-btn" title="Đóng" onclick="closeEmulator()">×</button>
+        </div>
+        <div class="game-body" id="gameBody">
+            <div class="screen-area" id="screenArea">
+                <div class="screen-frame" id="screenFrame">
+                    <iframe id="emulatorFrame" class="emulator-frame"></iframe>
+                    <div id="rotatePrompt" class="rotate-prompt" aria-live="polite">
+                        <div class="rotate-prompt-box">
+                            <div id="rotatePromptText">Xoay game sau 5 giây...</div>
+                            <small>Nhấn phím, chạm hoặc click bất kỳ để hủy tự xoay</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="gamepad" id="gamepad">
+                    <div class="gp-top">
+                        <div class="nokia-body">
+                            <div class="nokia-brand">NOKIA</div>
+                            <div class="soft-row">
+                                <button class="soft-key" data-code="-6">L</button>
+                                <button class="soft-key" data-code="122">C</button>
+                                <button class="soft-key" data-code="99">D</button>
+                                <button class="soft-key" data-code="-7">R</button>
+                            </div>
+                            <hr class="nokia-sep">
+                            <div class="dpad-wheel-wrap">
+                                <div class="dpad-bg-circle"></div>
+                                <button class="dpad-seg seg-up" data-code="-1">
+                                    <span class="seg-icon">▲</span>
+                                    <span class="seg-key">W</span>
+                                </button>
+                                <button class="dpad-seg seg-left" data-code="-3">
+                                    <span class="seg-icon">◀</span>
+                                    <span class="seg-key">A</span>
+                                </button>
+                                <button class="dpad-seg seg-right" data-code="-4">
+                                    <span class="seg-icon">▶</span>
+                                    <span class="seg-key">D</span>
+                                </button>
+                                <button class="dpad-seg seg-down" data-code="-2">
+                                    <span class="seg-icon">▼</span>
+                                    <span class="seg-key">S</span>
+                                </button>
+                                <button class="dpad-ok" data-code="-5">
+                                    <span class="ok-label">OK</span>
+                                    <span class="wasd-label">WASD</span>
+                                </button>
+                            </div>
+                            <hr class="nokia-sep">
+                            <div class="numpad-wrap">
+                                <div class="numpad">
+                                    <button class="num-btn" data-code="49">1</button>
+                                    <button class="num-btn" data-code="50">2</button>
+                                    <button class="num-btn" data-code="51">3</button>
+                                    <button class="num-btn" data-code="52">4</button>
+                                    <button class="num-btn" data-code="53">5</button>
+                                    <button class="num-btn" data-code="54">6</button>
+                                    <button class="num-btn" data-code="55">7</button>
+                                    <button class="num-btn" data-code="56">8</button>
+                                    <button class="num-btn" data-code="57">9</button>
+                                    <button class="num-btn" data-code="42">*</button>
+                                    <button class="num-btn" data-code="48">0</button>
+                                    <button class="num-btn" data-code="35">#</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="versionModal" class="version-modal">
+        <div class="version-box">
+            <div class="version-head">
+                <h3 id="versionTitle">Chọn phiên bản</h3>
+                <button class="version-close" onclick="closeVersionModal()">×</button>
+            </div>
+            <div id="versionList"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentFrame = null, currentGameId = null, keyListener = null, exitWatcher = null, autosaveTimer = null, autofitTimer = null, autoRotateTimer = null, autoRotatePromptTimer = null, autoRotateCountdownTimer = null, autoRotateInteractionCleanup = null, closing = false, gamepadVisible = false, isFullscreen = false, gameReady = false, pendingSavePromise = null, autoRotatePending = false, autoRotateDisabled = false, autoRotateRemaining = 0;
+        let dedomilQuery = '', dedomilPage = 1, dedomilHasNext = false, dedomilBusy = false;
+        let allGames = [], groupedGames = [], randomRank = new Map();
+        const DEFAULT_RANDOM_LIMIT = 10;
+        let searchDebounceTimer = null;
+        const SEARCH_DEBOUNCE_MS = 2000;
+        const SEARCH_MIN_CHARS = 3;
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+        function withTimeout(promise, ms) { return Promise.race([promise, sleep(ms).then(() => 'TIMEOUT')]); }
+
+        function onSearchInputDebounced() {
+            const box = document.getElementById('searchBox');
+            const hint = document.getElementById('searchHint');
+            const q = (box?.value || '').trim();
+            if (searchDebounceTimer) { clearTimeout(searchDebounceTimer); searchDebounceTimer = null; }
+            if (q.length === 0) {
+                if (hint) hint.textContent = '';
+                renderGameList();
+                return;
+            }
+            if (q.length > 0 && q.length < SEARCH_MIN_CHARS) {
+                if (hint) { hint.textContent = 'Nhập ít nhất ' + SEARCH_MIN_CHARS + ' ký tự để tìm (' + q.length + '/' + SEARCH_MIN_CHARS + ')...'; hint.style.color = '#ffaa55'; }
+                // chưa đủ ký tự -> hiển thị random 10, không filter
+                renderGameList();
+                return;
+            }
+            if (hint) {
+                hint.textContent = 'Đang chờ gõ xong ' + (SEARCH_DEBOUNCE_MS/1000) + 's...';
+                hint.style.color = '#7cc4ff';
+            }
+            searchDebounceTimer = setTimeout(() => {
+                searchDebounceTimer = null;
+                if (hint) { hint.textContent = '✅ Đã tìm "' + q + '"'; hint.style.color = '#00c853'; }
+                renderGameList();
+                setTimeout(() => { if (hint) hint.textContent = ''; }, 1500);
+            }, SEARCH_DEBOUNCE_MS);
+        }
+        // giữ tương thích cũ, filterGames giờ chỉ gọi debounce
+        function filterGames(q) { onSearchInputDebounced(); }
+        function populateFilters(data) {
+            const devSelect = document.getElementById('devFilter');
+            const profileSelect = document.getElementById('profileFilter');
+            const curDev = devSelect ? devSelect.value : '';
+            const curProfile = profileSelect ? profileSelect.value : '';
+            if (devSelect) {
+                devSelect.innerHTML = '<option value="">Dev: Tất cả</option>' + (data.devs || []).map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>').join('');
+                devSelect.value = curDev;
+            }
+            if (profileSelect) {
+                profileSelect.innerHTML = '<option value="">Profile: Tất cả</option>' + (data.profiles || []).map(p => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>').join('');
+                profileSelect.value = curProfile;
+            }
+        }
+        function iconHtmlFor(game) {
+            return game.hasIcon
+                ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
+                : '<div class="game-icon-placeholder">🎮</div>';
+        }
+        function getSearchQuery() {
+            return (document.getElementById('searchBox')?.value || '').trim();
+        }
+        function getSearchQueryLower() {
+            const q = getSearchQuery();
+            return q.length >= SEARCH_MIN_CHARS ? q.toLowerCase() : '';
+        }
+        function isSearchActive() {
+            const q = getSearchQuery();
+            return q.length >= SEARCH_MIN_CHARS;
+        }
+        function getFilteredGames() {
+            const qLower = getSearchQueryLower();
+            const dev = document.getElementById('devFilter')?.value || '';
+            const profile = document.getElementById('profileFilter')?.value || '';
+            return allGames.filter(g => {
+                if (qLower && !(g.name || '').toLowerCase().includes(qLower)) return false;
+                if (dev && g.dev !== dev) return false;
+                if (profile && g.profile !== profile) return false;
+                return true;
+            });
+        }
+        function hasTextSearch() { return isSearchActive(); }
+        function assignRandomRanks() {
+            randomRank = new Map();
+            const keys = [...new Set(allGames.map(g => g.duplicateKey || g.name))];
+            keys.forEach(k => randomRank.set(k, Math.random()));
+        }
+        function limitDefaultGroups(groups) {
+            if (hasTextSearch()) return { groups, limited: false, totalGroups: groups.length };
+            const sorted = groups.slice().sort((a, b) => {
+                const ak = a[0]?.duplicateKey || a[0]?.name || '';
+                const bk = b[0]?.duplicateKey || b[0]?.name || '';
+                return (randomRank.get(ak) ?? Math.random()) - (randomRank.get(bk) ?? Math.random());
+            });
+            return { groups: sorted.slice(0, DEFAULT_RANDOM_LIMIT), limited: sorted.length > DEFAULT_RANDOM_LIMIT, totalGroups: sorted.length };
+        }
+
+        function buildGroups(games) {
+            const map = new Map();
+            games.forEach(g => {
+                const key = g.duplicateKey || g.name;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(g);
+            });
+            return [...map.values()].map(list => list.sort((a,b) => ((a.resolution?.width||0)*(a.resolution?.height||0)) - ((b.resolution?.width||0)*(b.resolution?.height||0))));
+        }
+        function renderGameList() {
+            const container = document.getElementById('jarList');
+            if (!container) return;
+            const filtered = getFilteredGames();
+            const allGroups = buildGroups(filtered);
+            const limited = limitDefaultGroups(allGroups);
+            groupedGames = limited.groups;
+            const qRaw = getSearchQuery();
+            const qActive = isSearchActive();
+            const baseStatus = '✅ ' + allGames.length + ' game • ' + limited.totalGroups + ' tên';
+            let statusHtml = baseStatus;
+            if (qRaw.length > 0 && qRaw.length < SEARCH_MIN_CHARS) {
+                statusHtml += ' • gõ ít nhất ' + SEARCH_MIN_CHARS + ' ký tự để tìm (' + qRaw.length + '/' + SEARCH_MIN_CHARS + ') — đang hiển thị ngẫu nhiên ' + groupedGames.length + ' game';
+            } else if (!qActive && limited.limited) {
+                statusHtml += ' • đang hiển thị ngẫu nhiên ' + groupedGames.length + ' / ' + limited.totalGroups + ' game — nhập ≥' + SEARCH_MIN_CHARS + ' ký tự để tìm';
+            } else if (qActive) {
+                statusHtml += ' • kết quả tìm kiếm "' + escapeHtml(qRaw) + '": ' + groupedGames.length;
+            }
+            document.getElementById('status').innerHTML = statusHtml;
+            container.innerHTML = '';
+            if (!groupedGames.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+            const frag = document.createDocumentFragment();
+            groupedGames.forEach(group => {
+                const game = group[0];
+                const card = document.createElement('div');
+                card.className = 'jar-card';
+                const r = game.resolution;
+                const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + (group.length > 1 ? '<span class="dup-badge">' + group.length + ' bản</span>' : '') + '</div>' : '';
+                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '</div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + '</div>';
+                card.innerHTML = iconHtmlFor(game) + '<div class="game-info"><div class="jar-name">' + escapeHtml(game.name) + '</div>' + resBadge + meta + '<button class="play-btn">▶ Chơi</button></div>';
+                card.onclick = () => { if (group.length > 1) openVersionModal(group); else launchGame(game.id, game.name); };
+                frag.appendChild(card);
+            });
+            container.appendChild(frag);
+        }
+        function openVersionModal(group) {
+            const modal = document.getElementById('versionModal');
+            const list = document.getElementById('versionList');
+            const title = document.getElementById('versionTitle');
+            if (!modal || !list) return;
+            if (title) title.textContent = 'Chọn phiên bản: ' + (group[0]?.name || 'Game');
+            list.innerHTML = group.map(g => {
+                const r = g.resolution;
+                const meta = (r ? r.width + '×' + r.height : '?') + ' • Dev: ' + escapeHtml(g.dev || 'Unknown') + ' • ' + escapeHtml(g.profile || 'Unknown') + (g.version ? ' • v' + escapeHtml(g.version) : '');
+                return '<div class="version-row" onclick="closeVersionModal(); launchGame(\'' + escapeHtml(g.id) + '\', \'' + escapeHtml(g.name).replace(/'/g, '&#39;') + '\')">' + iconHtmlFor(g) + '<div class="version-info"><div class="version-title">' + escapeHtml(g.name) + '</div><div class="version-meta">' + meta + '</div></div><button class="version-play">Chơi</button></div>';
+            }).join('');
+            modal.classList.add('visible');
+        }
+        function closeVersionModal() { document.getElementById('versionModal')?.classList.remove('visible'); }
+
+        const DEFAULT_FREEJ2ME_KEYMAP = {
+            softLeft: { key: 'q', code: 'KeyQ' },
+            softRight: { key: 'w', code: 'KeyW' },
+            up: { key: 'ArrowUp', code: 'ArrowUp' },
+            left: { key: 'ArrowLeft', code: 'ArrowLeft' },
+            down: { key: 'ArrowDown', code: 'ArrowDown' },
+            right: { key: 'ArrowRight', code: 'ArrowRight' },
+            ok: { key: 'Enter', code: 'Enter' },
+            f1: { key: 'F1', code: 'F1' },
+            f2: { key: 'F2', code: 'F2' },
+            star: { key: 'e', code: 'KeyE' },
+            pound: { key: 'r', code: 'KeyR' },
+            digit0: { key: '0', code: 'Digit0' },
+            digit1: { key: '1', code: 'Digit1' },
+            digit2: { key: '2', code: 'Digit2' },
+            digit3: { key: '3', code: 'Digit3' },
+            digit4: { key: '4', code: 'Digit4' },
+            digit5: { key: '5', code: 'Digit5' },
+            digit6: { key: '6', code: 'Digit6' },
+            digit7: { key: '7', code: 'Digit7' },
+            digit8: { key: '8', code: 'Digit8' },
+            digit9: { key: '9', code: 'Digit9' },
+            escape: { key: 'Escape', code: 'Escape' }
+        };
+        const WEB_TO_ACTION_DEFAULTS = {
+            KeyQ: 'softLeft', KeyE: 'softRight', KeyW: 'up', KeyA: 'left', KeyS: 'down', KeyD: 'right', Space: 'ok',
+            KeyZ: 'f1', KeyC: 'f2', Digit0: 'digit0', Digit1: 'digit1', Digit2: 'digit2', Digit3: 'digit3', Digit4: 'digit4',
+            Digit5: 'digit5', Digit6: 'digit6', Digit7: 'digit7', Digit8: 'digit8', Digit9: 'digit9',
+            ArrowUp: 'up', ArrowLeft: 'left', ArrowDown: 'down', ArrowRight: 'right', Enter: 'ok', Escape: 'escape', F1: 'f1', F2: 'f2'
+        };
+        const ACTION_LABELS = {
+            softLeft: 'Soft trái', softRight: 'Soft phải', up: 'Lên', left: 'Trái', down: 'Xuống', right: 'Phải', ok: 'OK',
+            f1: 'F1 / phụ trái', f2: 'F2 / phụ phải', star: '*', pound: '#', digit0: 'Số 0', digit1: 'Số 1', digit2: 'Số 2', digit3: 'Số 3',
+            digit4: 'Số 4', digit5: 'Số 5', digit6: 'Số 6', digit7: 'Số 7', digit8: 'Số 8', digit9: 'Số 9'
+        };
+        let freej2meActionBindings = null;
+        let keymapDraft = null;
+        let keymapCaptureAction = null;
+        function loadFreeJ2MEActionBindings() {
+            try { const raw = localStorage.getItem('freej2meActionBindings'); return raw ? { ...WEB_TO_ACTION_DEFAULTS, ...(JSON.parse(raw)||{}) } : { ...WEB_TO_ACTION_DEFAULTS }; }
+            catch (e) { return { ...WEB_TO_ACTION_DEFAULTS }; }
+        }
+        function saveFreeJ2MEActionBindings(map) { localStorage.setItem('freej2meActionBindings', JSON.stringify(map || {})); }
+        function normalizeKeyCodeValue(v) { return v ? String(v) : ''; }
+        function humanKeyName(code) {
+            const c = normalizeKeyCodeValue(code); if (!c) return '—';
+            const aliases = { Space: 'Space', KeyQ: 'Q', KeyE: 'E', KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyZ: 'Z', KeyC: 'C' };
+            if (aliases[c]) return aliases[c]; if (c.startsWith('Key')) return c.slice(3); if (c.startsWith('Digit')) return c.slice(5); return c;
+        }
+        function renderKeymapGrid() {
+            const grid = document.getElementById('keymapGrid'); if (!grid) return; grid.innerHTML = '';
+            const draft = keymapDraft || { ...freej2meActionBindings };
+            Object.keys(ACTION_LABELS).forEach(action => {
+                const holder = document.createElement('button');
+                holder.type = 'button'; holder.dataset.action = action;
+                holder.style.cssText = 'text-align:left;padding:12px;border-radius:10px;border:1px solid #3a4660;background:#161d2c;color:#fff;cursor:pointer;';
+                holder.innerHTML = '<div style="font-size:13px;color:#9fe8ff;font-weight:700;margin-bottom:4px;">' + ACTION_LABELS[action] + '</div>' + '<div style="font-size:12px;color:#cfe0ff;">' + humanKeyName(Object.keys(draft).find(k => draft[k] === action) || '') + '</div>';
+                if (keymapCaptureAction === action) holder.style.outline = '2px solid #7CFF7C';
+                holder.onclick = function() { startCaptureForAction(action); };
+                grid.appendChild(holder);
+            });
+        }
+        function openKeymapModal() {
+            freej2meActionBindings = loadFreeJ2MEActionBindings(); keymapDraft = { ...freej2meActionBindings }; keymapCaptureAction = null;
+            document.getElementById('keymapCaptureHint').textContent = 'Chưa chọn ô nào.';
+            document.getElementById('keymapModal').style.display = 'flex'; renderKeymapGrid(); document.addEventListener('keydown', keymapCaptureListener, true);
+        }
+        function closeKeymapModal() { document.getElementById('keymapModal').style.display = 'none'; keymapCaptureAction = null; keymapDraft = null; document.removeEventListener('keydown', keymapCaptureListener, true); }
+        function startCaptureForAction(action) { keymapCaptureAction = action; document.getElementById('keymapCaptureHint').textContent = 'Đang chờ phím cho: ' + ACTION_LABELS[action]; renderKeymapGrid(); }
+        function keymapCaptureListener(e) {
+            const modal = document.getElementById('keymapModal'); if (!modal || modal.style.display === 'none' || !keymapCaptureAction) return;
+            e.preventDefault(); e.stopPropagation(); const code = normalizeKeyCodeValue(e.code || ''); if (!code) return;
+            Object.keys(keymapDraft).forEach(k => { if (keymapDraft[k] === keymapCaptureAction) delete keymapDraft[k]; });
+            keymapDraft[code] = keymapCaptureAction; document.getElementById('keymapCaptureHint').textContent = 'Đã gán ' + humanKeyName(code) + ' → ' + ACTION_LABELS[keymapCaptureAction];
+            keymapCaptureAction = null; renderKeymapGrid();
+        }
+        function applyKeymapDraft() { if (!keymapDraft) return closeKeymapModal(); saveFreeJ2MEActionBindings(keymapDraft); freej2meActionBindings = { ...keymapDraft }; closeKeymapModal(); }
+        function resetKeymapDraft() { keymapDraft = { ...WEB_TO_ACTION_DEFAULTS }; keymapCaptureAction = null; document.getElementById('keymapCaptureHint').textContent = 'Đã reset về mặc định.'; renderKeymapGrid(); }
+
+        async function loadJars() {
+            const container = document.getElementById('jarList');
+            try {
+                const res = await fetch('/api/jars');
+                const data = await res.json();
+                if (data.error || !data.games?.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+                allGames = data.games || [];
+                assignRandomRanks();
+                populateFilters(data);
+                renderGameList();
+            } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server</div>'; }
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+        }
+        function setDedomilStatus(text, isError) {
+            const el = document.getElementById('dedomilStatus');
+            if (el) { el.textContent = text || ''; el.style.color = isError ? '#ff6b6b' : '#aaa'; }
+        }
+        function renderDedomilResults(results) {
+            const box = document.getElementById('dedomilResults');
+            if (!box) return;
+            if (!results || !results.length) {
+                box.classList.add('visible');
+                box.innerHTML = '<div style="color:#888;font-size:12px;padding:8px">Không có kết quả.</div>';
+                return;
+            }
+            box.classList.add('visible');
+            box.innerHTML = results.map(g => '<div class="dedomil-item">' +
+                '<div class="dedomil-title">' + escapeHtml(g.title) + '<span class="dedomil-date">' + escapeHtml(g.date || '') + '</span></div>' +
+                '<button class="dedomil-download" onclick="downloadDedomilGame(\'' + encodeURIComponent(g.id) + '\', this)">Tải</button>' +
+                '</div>').join('');
+        }
+        function updateDedomilPager() {
+            const pager = document.getElementById('dedomilPager');
+            const clearBtn = document.getElementById('dedomilClearBtn');
+            if (pager) pager.style.display = dedomilQuery ? 'flex' : 'none';
+            if (clearBtn) clearBtn.style.display = dedomilQuery ? '' : 'none';
+            const prev = document.getElementById('dedomilPrevBtn');
+            const next = document.getElementById('dedomilNextBtn');
+            const label = document.getElementById('dedomilPageLabel');
+            if (prev) prev.disabled = dedomilBusy || dedomilPage <= 1;
+            if (next) next.disabled = dedomilBusy || !dedomilHasNext;
+            if (label) label.textContent = 'Trang ' + dedomilPage;
+        }
+        function clearDedomilSearch() {
+            dedomilQuery = ''; dedomilPage = 1; dedomilHasNext = false; dedomilBusy = false;
+            const input = document.getElementById('dedomilSearchInput'); if (input) input.value = '';
+            const results = document.getElementById('dedomilResults'); if (results) { results.classList.remove('visible'); results.innerHTML = ''; }
+            setDedomilStatus('Dedomil yêu cầu từ khóa ít nhất 3 ký tự.');
+            updateDedomilPager();
+        }
+        async function searchDedomilGames(page) {
+            if (dedomilBusy) return;
+            const input = document.getElementById('dedomilSearchInput');
+            const q = (input && input.value || '').trim();
+            if (q.length < 3) { setDedomilStatus('Dedomil yêu cầu từ khóa ít nhất 3 ký tự.', true); return; }
+            dedomilBusy = true; dedomilQuery = q; dedomilPage = Math.max(1, page || 1); updateDedomilPager();
+            const btn = document.getElementById('dedomilSearchBtn'); if (btn) btn.disabled = true;
+            setDedomilStatus('Đang tìm trên Dedomil...');
+            try {
+                const res = await fetch('/api/dedomil/search?q=' + encodeURIComponent(q) + '&page=' + encodeURIComponent(dedomilPage));
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Lỗi tìm kiếm');
+                dedomilHasNext = !!data.hasNext;
+                renderDedomilResults(data.results || []);
+                const hidden = data.filteredUnsupported ? ' Đã ẩn ' + data.filteredUnsupported + ' mục không có bản JAR/màn hình hỗ trợ.' : '';
+                setDedomilStatus('Tìm thấy ' + ((data.results || []).length) + ' game tải được ở trang ' + data.page + '.' + hidden + ' Chọn Tải để tự lấy bản phù hợp nhất.');
+            } catch(e) {
+                dedomilHasNext = false;
+                renderDedomilResults([]);
+                setDedomilStatus(e.message || 'Lỗi tìm kiếm Dedomil', true);
+            } finally {
+                dedomilBusy = false; if (btn) btn.disabled = false; updateDedomilPager();
+            }
+        }
+        async function downloadDedomilGame(encodedId, btn) {
+            const id = decodeURIComponent(encodedId);
+            if (btn) { btn.disabled = true; btn.textContent = 'Đang tải...'; }
+            setDedomilStatus('Đang phân tích phiên bản và tải JAR từ Dedomil...');
+            try {
+                const res = await fetch('/api/dedomil/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Tải thất bại');
+                setDedomilStatus('✅ Đã tải ' + data.title + ' (' + data.resolution + ') → ' + data.file);
+                await loadJars();
+                const searchBox = document.getElementById('searchBox'); if (searchBox) { searchBox.value = ''; filterGames(''); }
+                setTimeout(() => clearDedomilSearch(), 800);
+            } catch(e) {
+                setDedomilStatus('❌ ' + (e.message || 'Tải thất bại'), true);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Tải'; }
+            }
+        }
+
+        async function launchGame(gameId, gameName) {
+            // Nếu đang có save của game cũ chạy nền, đợi tối đa 2.5 giây để tránh xung đột IDB
+            if (pendingSavePromise) {
+                try { await withTimeout(pendingSavePromise, 2500); } catch(e) {}
+                pendingSavePromise = null;
+            }
+            // Nếu đang đóng game cũ, đợi đóng xong
+            if (closing) {
+                let wait = 0;
+                while (closing && wait < 2500) { await sleep(50); wait += 50; }
+            }
+
+            document.getElementById('modalTitle').textContent = gameName || 'Game';
+            document.getElementById('gameView').classList.add('visible');
+            currentFrame = document.getElementById('emulatorFrame');
+            currentGameId = gameId;
+            closing = false;
+            gameReady = false;
+            autoRotateDisabled = false;
+            cancelAutoRotatePrompt();
+            stopAutoRotateInteractionWatch();
+            document.getElementById('saveStatus').textContent = '⏳';
+            try {
+                await loadSaveFromServer(gameId);
+                const engineMode = document.getElementById('engineModeSelect').value;
+                const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId) + '&enginemode=' + encodeURIComponent(engineMode));
+                const data = await r.json();
+                if (data.success) {
+                    currentEngineKind = data.engine === 'freej2me-web' ? 'freej2me' : 'legacy';
+                    currentFallbackAppId = data.appId || null;
+                    currentFrame.src = data.url;
+                    currentFrame.onload = () => {
+                        if (!currentFrame) return;
+                        const loadedFrame = currentFrame;
+                        setupKeyboardMapping(loadedFrame);
+                        hookExit(loadedFrame);
+                        startAutosave();
+                        startAutoFit();
+                        // PC: KHÔNG tự xoay theo hướng màn hình (đó là logic mobile). Nút xoay tay vẫn dùng được.
+                        gameReady = true;
+                        try { loadedFrame.focus(); } catch (e) {}
+                    };
+                    // PC: luôn hiện bàn phím ảo (layout cố định desktop), không dò touch.
+                    showGamepad();
+                } else if (data.error) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>'; }
+            } catch (e) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi</h3>'; }
+        }
+
+        function toggleFullscreen() {
+            const el = document.getElementById('gameView');
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+                isFullscreen = true;
+            } else {
+                (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+                isFullscreen = false;
+            }
+            setTimeout(() => fitFrame(), 300);
+        }
+        document.addEventListener('fullscreenchange', () => setTimeout(() => fitFrame(), 200));
+        document.addEventListener('webkitfullscreenchange', () => setTimeout(() => fitFrame(), 200));
+
+        function toggleGamepad() { gamepadVisible ? hideGamepad() : showGamepad(); }
+        function showGamepad() { gamepadVisible = true; document.getElementById('gamepad').classList.add('visible'); document.getElementById('padToggle').classList.add('active'); setTimeout(() => fitFrame(), 50); }
+        function hideGamepad() { gamepadVisible = false; document.getElementById('gamepad').classList.remove('visible'); document.getElementById('padToggle').classList.remove('active'); setTimeout(() => fitFrame(), 50); }
+
+        function dispatchKeyToFreeJ2MEWeb(key, code, isPress) {
+            try {
+                const win = currentFrame && currentFrame.contentWindow;
+                const doc = win && win.document;
+                if (!win || !doc || !gameReady) return;
+                const display = doc.getElementById('display');
+                const target = display || doc.activeElement || doc.body || doc.documentElement;
+                if (target && target.focus) target.focus();
+                const keyCodeMap = {
+                    Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+                    F1: 112, F2: 113,
+                    Digit0: 48, Digit1: 49, Digit2: 50, Digit3: 51, Digit4: 52,
+                    Digit5: 53, Digit6: 54, Digit7: 55, Digit8: 56, Digit9: 57,
+                    KeyQ: 81, KeyW: 87, KeyE: 69, KeyR: 82
+                };
+                const resolvedKey = key || '';
+                const resolvedCode = code || '';
+                const keyCode = keyCodeMap[resolvedCode] || keyCodeMap[resolvedKey] || (resolvedKey.length === 1 ? resolvedKey.toUpperCase().charCodeAt(0) : 0);
+                const charCode = resolvedKey.length === 1 ? resolvedKey.charCodeAt(0) : 0;
+
+                function fire(type) {
+                    const evt = new win.KeyboardEvent(type, {
+                        key: resolvedKey,
+                        code: resolvedCode,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    for (const [prop, value] of [['keyCode', keyCode], ['which', keyCode], ['charCode', charCode]]) {
+                        try { Object.defineProperty(evt, prop, { get: () => value }); } catch (e) {}
+                    }
+                    try { target.dispatchEvent(evt); } catch (e) {}
+                    try { if (target !== doc) doc.dispatchEvent(evt); } catch (e) {}
+                    try { if (target !== win) win.dispatchEvent(evt); } catch (e) {}
+                }
+
+                fire(isPress ? 'keydown' : 'keyup');
+                // freej2me-web dùng repeat manager nội bộ; để mô phỏng đúng hơn cho thao tác click nhanh,
+                // chỉ phát thêm keypress ở lúc nhấn xuống.
+                if (isPress) fire('keypress');
+            } catch (e) {}
+        }
+
+        function getFreeJ2MECompatKeyForEvent(e) {
+            freej2meActionBindings = freej2meActionBindings || loadFreeJ2MEActionBindings();
+            const code = normalizeKeyCodeValue(e.code || '');
+            const key = (e.key || '').toLowerCase();
+            const action = freej2meActionBindings[code] || null;
+            if (action && DEFAULT_FREEJ2ME_KEYMAP[action]) return DEFAULT_FREEJ2ME_KEYMAP[action];
+            if (key === '*') return DEFAULT_FREEJ2ME_KEYMAP.star;
+            if (key === '#') return DEFAULT_FREEJ2ME_KEYMAP.pound;
+            if (key === 'r') return DEFAULT_FREEJ2ME_KEYMAP.pound;
+            return null;
+        }
+
+        function legacyCodeToFreeJ2MEKey(code) {
+            const n = Number(code);
+            const map = {
+                '-1': { key: 'ArrowUp', code: 'ArrowUp' },
+                '-2': { key: 'ArrowDown', code: 'ArrowDown' },
+                '-3': { key: 'ArrowLeft', code: 'ArrowLeft' },
+                '-4': { key: 'ArrowRight', code: 'ArrowRight' },
+                '-5': { key: 'Enter', code: 'Enter' },
+                '-6': { key: 'q', code: 'KeyQ' },
+                '-7': { key: 'w', code: 'KeyW' },
+                '48': { key: '0', code: 'Digit0' },
+                '49': { key: '1', code: 'Digit1' },
+                '50': { key: '2', code: 'Digit2' },
+                '51': { key: '3', code: 'Digit3' },
+                '52': { key: '4', code: 'Digit4' },
+                '53': { key: '5', code: 'Digit5' },
+                '54': { key: '6', code: 'Digit6' },
+                '55': { key: '7', code: 'Digit7' },
+                '56': { key: '8', code: 'Digit8' },
+                '57': { key: '9', code: 'Digit9' },
+                '42': { key: 'e', code: 'KeyE' },
+                '35': { key: 'r', code: 'KeyR' },
+                '122': { key: 'f1', code: 'F1' },
+                '99': { key: 'f2', code: 'F2' }
+            };
+            return map[String(n)] || null;
+        }
+
+        function sendKeyRaw(code, isPress) {
+            try {
+                const win = currentFrame && currentFrame.contentWindow;
+                if (!win || !gameReady) return;
+                if (currentEngineKind === 'freej2me') {
+                    const mapped = legacyCodeToFreeJ2MEKey(code);
+                    if (mapped) dispatchKeyToFreeJ2MEWeb(mapped.key, mapped.code, isPress);
+                    return;
+                }
+                if (!win.MIDP) return;
+                if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(code);
+                else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(code);
+            } catch (e) {}
+        }
+        function bindGamepadButtons() {
+            document.querySelectorAll('[data-code]').forEach(btn => {
+                const code = parseInt(btn.dataset.code, 10);
+                const press = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.add('pressed'); sendKeyRaw(code, true); };
+                const release = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.remove('pressed'); sendKeyRaw(code, false); };
+                btn.addEventListener('touchstart', press, { passive: false });
+                btn.addEventListener('touchend', release, { passive: false });
+                btn.addEventListener('touchcancel', release, { passive: false });
+                btn.addEventListener('mousedown', press);
+                btn.addEventListener('mouseup', release);
+                btn.addEventListener('mouseleave', release);
+            });
+        }
+
+        function updateRotatePromptText() {
+            const el = document.getElementById('rotatePromptText');
+            if (el) el.textContent = 'Phát hiện cần xoay màn hình. Xoay game sau ' + autoRotateRemaining + ' giây...';
+        }
+        function cancelAutoRotatePrompt() {
+            if (autoRotatePromptTimer) { clearTimeout(autoRotatePromptTimer); autoRotatePromptTimer = null; }
+            if (autoRotateCountdownTimer) { clearInterval(autoRotateCountdownTimer); autoRotateCountdownTimer = null; }
+            autoRotatePending = false;
+            const prompt = document.getElementById('rotatePrompt');
+            if (prompt) prompt.classList.remove('visible');
+        }
+        function disableAutoRotateByUser() {
+            if (!currentFrame || closing) return;
+            autoRotateDisabled = true;
+            cancelAutoRotatePrompt();
+            stopAutoRotate();
+        }
+        function startAutoRotateInteractionWatch(iframe) {
+            stopAutoRotateInteractionWatch();
+            const events = ['keydown', 'mousedown', 'pointerdown', 'touchstart', 'wheel'];
+            const handler = function(e) {
+                if (!currentFrame || closing) return;
+                disableAutoRotateByUser();
+            };
+            const targets = [document, window];
+            try {
+                if (iframe && iframe.contentWindow) targets.push(iframe.contentWindow);
+                if (iframe && iframe.contentWindow && iframe.contentWindow.document) targets.push(iframe.contentWindow.document);
+            } catch(e) {}
+            targets.forEach(t => events.forEach(ev => { try { t.addEventListener(ev, handler, { capture: true, passive: true }); } catch(e) {} }));
+            autoRotateInteractionCleanup = function() {
+                targets.forEach(t => events.forEach(ev => { try { t.removeEventListener(ev, handler, true); } catch(e) {} }));
+            };
+        }
+        function stopAutoRotateInteractionWatch() {
+            if (autoRotateInteractionCleanup) { autoRotateInteractionCleanup(); autoRotateInteractionCleanup = null; }
+        }
+        function requestAutoRotate() {
+            if (autoRotateDisabled || autoRotatePending || !currentFrame || closing) return;
+            stopAutoRotate();
+            autoRotatePending = true;
+            autoRotateRemaining = 5;
+            updateRotatePromptText();
+            const prompt = document.getElementById('rotatePrompt');
+            if (prompt) prompt.classList.add('visible');
+            autoRotateCountdownTimer = setInterval(() => {
+                autoRotateRemaining--;
+                if (autoRotateRemaining < 0) autoRotateRemaining = 0;
+                updateRotatePromptText();
+            }, 1000);
+            autoRotatePromptTimer = setTimeout(() => {
+                if (!autoRotatePending || autoRotateDisabled || !currentFrame || closing) return;
+                cancelAutoRotatePrompt();
+                rotateGame(false);
+            }, 5000);
+        }
+        function rotateGame(manual = true) {
+            if (!currentFrame || closing) return;
+            const wasAutoRotateDisabled = autoRotateDisabled;
+            if (manual) disableAutoRotateByUser();
+            else autoRotateDisabled = true; // tự xoay chỉ chạy 1 lần, tránh vòng lặp reload liên tục
+            cancelAutoRotatePrompt();
+            const m = currentFrame.src.match(/canvasSize=size-(\d+)x(\d+)/);
+            if (!m) return;
+            gameReady = false;
+            currentFrame.src = currentFrame.src.replace(/canvasSize=size-\d+x\d+/, 'canvasSize=size-' + m[2] + 'x' + m[1]);
+            stopAutoRotate(); startAutoFit();
+            return { before: m[1] + 'x' + m[2], after: m[2] + 'x' + m[1], autoRotateDisabled: wasAutoRotateDisabled };
+        }
+        function startAutoRotate() { if (autoRotateDisabled || autoRotatePending) return; stopAutoRotate(); autoRotateTimer = setInterval(() => { if (!currentFrame || closing || autoRotateDisabled) { stopAutoRotate(); return; } autoDetectOrientation(); }, 2000); }
+        function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
+        function autoDetectOrientation() {
+            if (!currentFrame || closing || autoRotateDisabled || autoRotatePending) return;
+            try {
+                const doc = currentFrame.contentWindow && currentFrame.contentWindow.document; if (!doc) return;
+                const canvas = doc.getElementById('canvas'); if (!canvas || !canvas.width || !canvas.height) return;
+                const ctx = canvas.getContext('2d'); if (!ctx) return;
+                const w = canvas.width, h = canvas.height; let q = [0,0,0,0], total = 0;
+                for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) { const d = ctx.getImageData(x, y, 1, 1).data; const bg = (d[0]<8&&d[1]<8&&d[2]<8) || (d[0]>247&&d[1]>247&&d[2]>247); if (!bg) { q[(x<w/2?0:1)+(y<h/2?0:2)]++; total++; } }
+                if (total < 50) return;
+                if (total / ((w/2)*(h/2)) < 0.55) { const tc=q[0]+q[1], bc=q[2]+q[3], lc=q[0]+q[2], rc=q[1]+q[3]; if (h>w && tc>0 && bc<tc*0.25) { requestAutoRotate(); return; } if (w>h && lc>0 && rc<lc*0.25) { requestAutoRotate(); return; } }
+            } catch(e) {}
+        }
+
+        function setupKeyboardMapping(iframe) {
+            const keyMap = { 'w':-1,'a':-3,'s':-2,'d':-4,'q':-6,'e':-7,'z':122,'c':99,' ':-5,'0':48,'1':49,'2':50,'3':51,'4':52,'5':53,'6':54,'7':55,'8':56,'9':57,'*':42,'#':35 };
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); }
+            keyListener = function(e) {
+                if (!currentFrame) return;
+                if (currentEngineKind === 'freej2me') {
+                    const mapped = getFreeJ2MECompatKeyForEvent(e);
+                    if (mapped) {
+                        e.preventDefault();
+                        dispatchKeyToFreeJ2MEWeb(mapped.key, mapped.code, e.type === 'keydown');
+                    }
+                    return;
+                }
+                const code = keyMap[(e.key || '').toLowerCase()];
+                if (code !== undefined) { e.preventDefault(); sendKeyRaw(code, e.type === 'keydown'); }
+            };
+            document.addEventListener('keydown', keyListener);
+            document.addEventListener('keyup', keyListener);
+        }
+
+        function startAutoFit() { stopAutoFit(); autofitTimer = setInterval(() => { if (currentFrame && !closing) fitFrame(); }, 400); }
+        function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+        function fitFrame() {
+            const frame = document.getElementById('emulatorFrame');
+            const screenFrame = document.getElementById('screenFrame');
+            const screenArea = document.getElementById('screenArea');
+            try {
+                const doc = frame.contentWindow && frame.contentWindow.document; if (!doc) return;
+                let canvas = doc.getElementById('canvas');
+                if (!canvas) canvas = doc.getElementById('display');
+                if (!canvas || !canvas.width || !canvas.height) return;
+                const cw = canvas.width, ch = canvas.height;
+                if (cw === frame._fitW && ch === frame._fitH && !frame._fitDirty) return;
+                frame._fitW = cw; frame._fitH = ch; frame._fitDirty = false;
+                
+                const maxW = screenArea.clientWidth - 8;
+                const maxH = screenArea.clientHeight - 8;
+                if (maxW <= 0 || maxH <= 0) return;
+
+                const scale = Math.min(maxW / cw, maxH / ch);
+                const realW = Math.floor(cw * scale);
+                const realH = Math.floor(ch * scale);
+                
+                screenFrame.style.width = realW + 'px';
+                screenFrame.style.height = realH + 'px';
+                
+                frame.style.width = cw + 'px';
+                frame.style.height = ch + 'px';
+                frame.style.transform = 'scale(' + scale + ')';
+            } catch(e) {}
+        }
+
+        function hookExit(iframe) {
+            let win; try { win = iframe.contentWindow; } catch(e) { return; }
+            if (!win) return;
+            // 1) Override showExitScreen nếu có
+            if (typeof win.showExitScreen === 'function') { win.showExitScreen = function() { try { if (win.myflushAll) win.myflushAll(); } catch(e){} handleGameExit('thoát'); }; }
+            // 2) Bắt MỌI lần iframe navigate sang trang khác (cross-origin OK)
+            iframe.addEventListener('load', function onIframeLoad() {
+                if (closing) { iframe.removeEventListener('load', onIframeLoad); return; }
+                try {
+                    const href = iframe.contentWindow.location.href;
+                    // Nếu URL không còn main.html → game đã thoát
+                    if (!href.includes('main.html')) { handleGameExit('rời trang'); return; }
+                } catch(e) {
+                    // Cross-origin: trang khác domain → chắc chắn game đã thoát
+                    handleGameExit('cross-origin redirect');
+                }
+            });
+            // 3) Polling dự phòng: kiểm tra exit-screen + URL
+            stopExitWatcher();
+            exitWatcher = setInterval(() => {
+                if (!currentFrame || closing) { stopExitWatcher(); return; }
+                try {
+                    const w = iframe.contentWindow; if (!w) return;
+                    const href = (w.location && w.location.href) || '';
+                    if (href && currentEngineKind === 'legacy' && !href.includes('main.html')) { handleGameExit('rời trang'); return; }
+                    if (href && currentEngineKind === 'freej2me' && !href.includes('run.html')) { handleGameExit('rời trang'); return; }
+                    const d = w.document;
+                    const es = d && d.getElementById('exit-screen');
+                    if (es && es.style && es.style.display === 'block') { handleGameExit('exit'); return; }
+                } catch(e) {
+                    // Cross-origin exception → game đã thoát
+                    handleGameExit('cross-origin');
+                }
+            }, 500);
+        }
+        function stopExitWatcher() { if (exitWatcher) { clearInterval(exitWatcher); exitWatcher = null; } }
+        async function handleGameExit(reason) {
+            if (closing || !currentFrame) return;
+            closing = true;
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate(); cancelAutoRotatePrompt(); stopAutoRotateInteractionWatch();
+            const win = currentFrame.contentWindow;
+            const frame = currentFrame;
+            const gameId = currentGameId;
+            currentFrame = null;
+            currentGameId = null;
+            gameReady = false;
+            document.getElementById('saveStatus').textContent = '💾 ' + reason;
+            // Đóng UI ngay lập tức, không để người dùng kẹt ở màn hình đen
+            document.getElementById('gameView').classList.remove('visible');
+            if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
+            hideGamepad();
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
+            // Lưu bất đồng bộ trong nền (có giới hạn thời gian) rồi dọn iframe
+            pendingSavePromise = exportSave(win, gameId, true);
+            try { await withTimeout(pendingSavePromise, 2000); } catch(e) {}
+            pendingSavePromise = null;
+            try { frame.onload = null; } catch(e) {}
+            try { frame.src = 'about:blank'; } catch(e) {}
+            try { const live = document.getElementById('emulatorFrame'); if (live) { live.onload = null; live.src = 'about:blank'; live.removeAttribute('srcdoc'); } } catch(e) {}
+            currentEngineKind = 'legacy';
+            currentFallbackAppId = null;
+            closing = false;
+        }
+
+        function openFsDB() { return new Promise((resolve, reject) => { const req = indexedDB.open('asyncStorage', 4); req.onupgradeneeded = (ev) => { const d = ev.target.result; if (!d.objectStoreNames.contains('fs4')) { const os = d.createObjectStore('fs4', { keyPath: 'pathname' }); os.createIndex('parentDir', 'parentDir', { unique: false }); } }; req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); }
+        async function importSaveToIDB(saveObj) { const db = await openFsDB(); await new Promise((resolve, reject) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); for (const p in saveObj) { const r = saveObj[p]; if (!r) continue; if (!r.isDir && Array.isArray(r.data)) { try { r.data = new Blob([new Int8Array(r.data)]); } catch(e){} } r.pathname = p; tx.objectStore('fs4').put(r); } tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close(); }
+        async function readIDBToText() { let db; try { db = await openFsDB(); } catch(e) { return '{}'; } if (!db.objectStoreNames.contains('fs4')) { db.close(); return '{}'; } const text = await new Promise((resolve) => { const tx = db.transaction('fs4', 'readonly'); const rq = tx.objectStore('fs4').getAll(); rq.onsuccess = () => { const recs = rq.result || []; const obj = {}; let pending = 0, done = false; const finish = () => { if (pending === 0 && !done) { done = true; resolve(JSON.stringify(obj)); } }; recs.forEach(rec => { if (!rec || !rec.pathname) return; if (!rec.isDir && rec.data instanceof Blob) { pending++; const reader = new FileReader(); reader.onload = () => { rec.data = Array.prototype.slice.call(new Int8Array(reader.result)); obj[rec.pathname] = rec; pending--; finish(); }; reader.onerror = () => { obj[rec.pathname] = rec; pending--; finish(); }; reader.readAsArrayBuffer(rec.data); } else { obj[rec.pathname] = rec; } }); finish(); }; rq.onerror = () => resolve('{}'); }); db.close(); return text; }
+        async function getSaveText(win) {
+            win = win || (currentFrame && currentFrame.contentWindow);
+            try { if (win && win.myflushAll) win.myflushAll(); } catch(e) {}
+            if (win && win.fs && win.fs.exportStore) {
+                try {
+                    const blob = await withTimeout(new Promise((res, rej) => {
+                        try { win.fs.exportStore(res); } catch(err) { rej(err); }
+                    }), 1500);
+                    if (blob && blob !== 'TIMEOUT' && blob.size > 0) return await blob.text();
+                } catch(e) {}
+            }
+            return await withTimeout(readIDBToText(), 1500);
+        }
+        async function loadSaveFromServer(gameId) {
+            const status = document.getElementById('saveStatus');
+            try {
+                const res = await fetch('/api/load?gameId=' + encodeURIComponent(gameId));
+                if (res.status === 404) { if (status) status.textContent = '🆕'; return; }
+                if (!res.ok) return;
+                // Xóa IDB cũ trước khi import save của game mới, tránh lẫn save giữa các game
+                try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {}
+                await importSaveToIDB(JSON.parse(await res.text()));
+                if (status) status.textContent = '📥';
+            } catch(e) {}
+        }
+        async function exportSave(win, gameId, finalWipe) {
+            const status = document.getElementById('saveStatus');
+            try {
+                if (status) status.textContent = '💾...';
+                const text = await getSaveText(win);
+                if (!text || text === 'TIMEOUT' || text === '{}') { if (status) status.textContent = '⚠'; return; }
+                const r = await withTimeout(fetch('/api/save?gameId=' + encodeURIComponent(gameId), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text }), 1500);
+                if (r === 'TIMEOUT') { if (status) status.textContent = '⚠'; return; }
+                await r.json();
+                if (finalWipe) { try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {} }
+                if (status) status.textContent = '✅';
+            } catch(e) { if (status) status.textContent = '⚠'; }
+        }
+        function startAutosave() { stopAutosave(); autosaveTimer = setInterval(() => { if (currentFrame && !closing && currentGameId) exportSave(currentFrame.contentWindow, currentGameId, false); }, 8000); }
+        function stopAutosave() { if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null; } }
+
+        async function closeEmulator() {
+            if (closing || !currentFrame) return;
+            closing = true;
+            stopExitWatcher(); stopAutosave(); stopAutoFit(); stopAutoRotate(); cancelAutoRotatePrompt(); stopAutoRotateInteractionWatch();
+            const win = currentFrame.contentWindow;
+            const frame = currentFrame;
+            const gameId = currentGameId;
+            currentFrame = null;
+            currentGameId = null;
+            gameReady = false;
+            document.getElementById('saveStatus').textContent = '💾...';
+            // Đóng UI ngay lập tức, không để người dùng kẹt ở màn hình đen
+            document.getElementById('gameView').classList.remove('visible');
+            if (isFullscreen) { (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document); isFullscreen = false; }
+            hideGamepad();
+            if (keyListener) { document.removeEventListener('keydown', keyListener); document.removeEventListener('keyup', keyListener); keyListener = null; }
+            // Lưu bất đồng bộ trong nền (có giới hạn thời gian) rồi dọn iframe
+            pendingSavePromise = exportSave(win, gameId, true);
+            try { await withTimeout(pendingSavePromise, 2000); } catch(e) {}
+            pendingSavePromise = null;
+            try { frame.onload = null; } catch(e) {}
+            try { frame.src = 'about:blank'; } catch(e) {}
+            try { const live = document.getElementById('emulatorFrame'); if (live) { live.onload = null; live.src = 'about:blank'; live.removeAttribute('srcdoc'); } } catch(e) {}
+            currentEngineKind = 'legacy';
+            currentFallbackAppId = null;
+            closing = false;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedMode = localStorage.getItem('preferredEngineMode');
+            if (savedMode) {
+                const select = document.getElementById('engineModeSelect');
+                if (select) select.value = savedMode;
+            }
+            freej2meActionBindings = loadFreeJ2MEActionBindings();
+            bindGamepadButtons(); loadJars();
+            const dedomilInput = document.getElementById('dedomilSearchInput');
+            if (dedomilInput) dedomilInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') searchDedomilGames(1); });
+            document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && document.getElementById('gameView').classList.contains('visible')) closeEmulator(); });
+            window.addEventListener('resize', () => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } });
+            window.addEventListener('orientationchange', () => { setTimeout(() => { if (currentFrame) { currentFrame._fitDirty = true; fitFrame(); } }, 300); });
+        });
+    </script>
+<script src="/patch_keymap_v7.js"></script>
+</body>
+</html>
