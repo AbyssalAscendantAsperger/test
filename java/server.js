@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const http = require('http');
 const https = require('https');
+// === FREEJ2ME RANDOM PORT MANAGER ===
+const { startFreej2meHost, stopAllFreej2meHosts } = require('./freej2me-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -698,7 +700,7 @@ app.get('/api/icon/:id', (req, res) => {
 });
 
 // API: Khởi chạy game -> phát token + tự set canvasSize từ resolution
-app.get('/api/launch', (req, res) => {
+app.get('/api/launch', async (req, res) => {
   if (!rateLimitCheck(req.sid)) {
     return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
   }

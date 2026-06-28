@@ -307,7 +307,6 @@
                     <option value="enginemode2-classes2.jar" selected>2 - Chế độ tiêu chuẩn (Nhanh)</option>
                     <option value="enginemode3-classes.jar">3 - Chế độ nâng cao (Mới nhất)</option>
                     <option value="enginemode4-freej2me-web">4 - Chế độ dự phòng (freej2me-web)</option>
-                    <option value="enginemode5-j2me-for-web">5 - Chế độ chuyên biệt (j2me-for-web)</option>
                 </select>
             </div>
             <div id="jarList" class="jar-list"></div>
@@ -1219,3 +1218,149 @@
     </script>
 </body>
 </html>
+/**
+ * FINAL FIX - Triệt để Emulator Context Pollution
+ * Đặc biệt xử lý vấn đề chuyển đổi giữa các game Mode 4 (freej2me-web)
+ */
+
+(function() {
+    'use strict';
+
+    let previousEngineKind = null;
+
+    // ==================== AGGRESSIVE RESET ====================
+    function aggressiveResetEmulator(isFreej2meSwitch = false) {
+        console.log('%c[Portal] AGGRESSIVE RESET (freej2me=' + isFreej2meSwitch + ')', 'color:#f66');
+
+        // 1. Dừng mọi thứ
+        try { if (typeof stopAutosave === 'function') stopAutosave(); } catch(e){}
+        try { if (typeof stopAutoFit === 'function') stopAutoFit(); } catch(e){}
+        try { if (typeof stopAutoRotate === 'function') stopAutoRotate(); } catch(e){}
+        try { if (typeof cancelAutoRotatePrompt === 'function') cancelAutoRotatePrompt(); } catch(e){}
+        try { if (typeof stopAutoRotateInteractionWatch === 'function') stopAutoRotateInteractionWatch(); } catch(e){}
+        try { if (typeof stopExitWatcher === 'function') stopExitWatcher(); } catch(e){}
+
+        // 2. Xóa listener
+        if (typeof keyListener !== 'undefined' && keyListener) {
+            try { document.removeEventListener('keydown', keyListener); } catch(e){}
+            try { document.removeEventListener('keyup', keyListener); } catch(e){}
+            keyListener = null;
+        }
+
+        // 3. Xử lý iframe mạnh hơn
+        const oldFrame = document.getElementById('emulatorFrame');
+        if (oldFrame) {
+            try {
+                oldFrame.onload = null;
+                oldFrame.src = 'about:blank';
+                oldFrame.removeAttribute('srcdoc');
+                
+                // Xóa hoàn toàn node
+                if (oldFrame.parentNode) {
+                    oldFrame.parentNode.removeChild(oldFrame);
+                }
+            } catch(e){}
+        }
+
+        // 4. Tạo iframe mới sạch
+        const container = document.querySelector('.screen-frame') || document.getElementById('gameView');
+        if (container) {
+            const newFrame = document.createElement('iframe');
+            newFrame.id = 'emulatorFrame';
+            newFrame.className = 'emulator-frame';
+            newFrame.style.cssText = 'display:block; border:none; width:100%; height:100%; background:#000;';
+            
+            // Chèn lại vào đúng vị trí
+            const screenArea = document.querySelector('.screen-area');
+            if (screenArea) {
+                screenArea.appendChild(newFrame);
+            } else {
+                container.appendChild(newFrame);
+            }
+        }
+
+        // 5. Reset state
+        if (typeof currentFrame !== 'undefined') currentFrame = null;
+        if (typeof currentGameId !== 'undefined') currentGameId = null;
+        if (typeof currentEngineKind !== 'undefined') currentEngineKind = 'legacy';
+        if (typeof currentFallbackAppId !== 'undefined') currentFallbackAppId = null;
+        if (typeof gameReady !== 'undefined') gameReady = false;
+        if (typeof closing !== 'undefined') closing = false;
+        if (typeof pendingSavePromise !== 'undefined') pendingSavePromise = null;
+
+        // 6. Xóa IndexedDB mạnh
+        try {
+            indexedDB.deleteDatabase('asyncStorage');
+            indexedDB.deleteDatabase('freej2me'); // freej2me-web có thể dùng DB riêng
+        } catch(e){}
+
+        // 7. Xóa localStorage liên quan (nếu có)
+        try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('freej2me') || key.includes('j2me') || key.includes('emulator'))) {
+                    localStorage.removeItem(key);
+                }
+            }
+        } catch(e){}
+
+        // 8. Reset UI
+        try {
+            const status = document.getElementById('saveStatus');
+            if (status) status.textContent = '⏳';
+            const gp = document.getElementById('gamepad');
+            if (gp) gp.classList.remove('visible');
+        } catch(e){}
+
+        console.log('%c[Portal] Aggressive reset done', 'color:#6f6');
+    }
+
+    // ==================== OVERRIDE launchGame ====================
+    const origLaunch = window.launchGame;
+    
+    window.launchGame = async function(gameId, gameName) {
+        const engineMode = document.getElementById('engineModeSelect').value;
+        const isFreej2me = engineMode.includes('freej2me') || engineMode.includes('mode4');
+
+        console.log('%c[Portal] launchGame → ' + engineMode, 'color:#0af');
+
+        // Quyết định có cần aggressive reset không
+        const needsAggressive = previousEngineKind === 'freej2me' || isFreej2me;
+
+        if (needsAggressive) {
+            aggressiveResetEmulator(isFreej2me);
+            await new Promise(r => setTimeout(r, 120)); // Đợi lâu hơn một chút
+        } else {
+            // Reset thông thường
+            if (typeof hardResetEmulator === 'function') {
+                hardResetEmulator();
+            }
+            await new Promise(r => setTimeout(r, 60));
+        }
+
+        previousEngineKind = isFreej2me ? 'freej2me' : 'legacy';
+
+        // Gọi hàm gốc
+        if (typeof origLaunch === 'function') {
+            return origLaunch(gameId, gameName);
+        }
+    };
+
+    // ==================== OVERRIDE closeEmulator ====================
+    const origClose = window.closeEmulator;
+    
+    window.closeEmulator = async function() {
+        if (typeof origClose === 'function') {
+            await origClose();
+        }
+        
+        // Sau khi đóng, reset mạnh hơn nếu trước đó là freej2me
+        if (previousEngineKind === 'freej2me') {
+            setTimeout(() => {
+                aggressiveResetEmulator(true);
+            }, 200);
+        }
+    };
+
+    console.log('%c[Portal] FINAL FIX loaded - Mode 4 switching should now work', 'color:#0f0');
+})();
