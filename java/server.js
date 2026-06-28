@@ -25,10 +25,16 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || process.env.ROUTER_PORT || 3000;
 
-// Cấu hình host/port đích cho từng nền tảng (có thể override bằng biến môi trường).
-const MOBILE_HOST = process.env.MOBILE_HOST || 'localhost';
+// Cấu hình host/port đích cho từng nền tảng.
+// QUAN TRỌNG (sửa lỗi màn hình trắng Mode4 khi chạy qua IP LAN/public):
+//   Mặc định router KHÔNG hardcode 'localhost' nữa. Nó dùng ĐÚNG host/IP mà
+//   client đang truy cập (lấy từ header Host) và chỉ đổi cổng. Nhờ vậy khi mở
+//   http://192.168.1.5:3000 sẽ chuyển hướng tới http://192.168.1.5:3001/3002
+//   (đúng IP server), thay vì http://localhost:3001 (trỏ về máy client -> treo).
+//   Chỉ khi bạn CỐ TÌNH tách host khác nhau thì mới set env MOBILE_HOST / PC_HOST.
+const MOBILE_HOST = process.env.MOBILE_HOST || null; // null = dùng host mà client truy cập
 const MOBILE_PORT = process.env.MOBILE_PORT || 3001;
-const PC_HOST     = process.env.PC_HOST     || 'localhost';
+const PC_HOST     = process.env.PC_HOST     || null;  // null = dùng host mà client truy cập
 const PC_PORT     = process.env.PC_PORT     || 3002;
 
 // --- Nhận diện thiết bị ------------------------------------------------------
@@ -65,11 +71,28 @@ function detectPlatform(req) {
   return { platform: MOBILE_UA_RE.test(ua) ? 'mobile' : 'pc', forced: false };
 }
 
+// Lấy hostname (KHÔNG kèm cổng) mà client đang thực sự truy cập.
+// Ưu tiên X-Forwarded-Host (khi đứng sau proxy), sau đó tới header Host.
+// Hỗ trợ cả IPv6 dạng [::1]:3000. Nếu không có thì fallback 'localhost'.
+function clientHostname(req) {
+  const raw = (req.headers['x-forwarded-host'] || req.headers['host'] || '').split(',')[0].trim();
+  if (!raw) return 'localhost';
+  // IPv6 có ngoặc vuông: [2001:db8::1]:3000 -> giữ nguyên phần trong ngoặc
+  const m6 = raw.match(/^(\[[^\]]+\])(?::\d+)?$/);
+  if (m6) return m6[1];
+  // IPv4 / hostname: cắt bỏ ':port' nếu có
+  return raw.replace(/:\d+$/, '');
+}
+
 function targetBase(platform, req) {
   // Giữ nguyên giao thức (http/https) mà client đang dùng.
   const proto = (req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http')).split(',')[0].trim();
-  if (platform === 'mobile') return `${proto}://${MOBILE_HOST}:${MOBILE_PORT}`;
-  return `${proto}://${PC_HOST}:${PC_PORT}`;
+  // Mặc định dùng ĐÚNG host/IP client đang truy cập (sửa lỗi localhost trên LAN/public).
+  // Chỉ ghi đè khi env MOBILE_HOST / PC_HOST được set tường minh.
+  const host = platform === 'mobile' ? (MOBILE_HOST || clientHostname(req))
+                                     : (PC_HOST     || clientHostname(req));
+  const port = platform === 'mobile' ? MOBILE_PORT : PC_PORT;
+  return `${proto}://${host}:${port}`;
 }
 
 // --- Endpoint kiểm tra nhanh (không chuyển hướng) ---------------------------
@@ -80,10 +103,11 @@ app.get('/__whoami', (req, res) => {
     router: true,
     detectedPlatform: platform,
     forced,
+    clientHost: clientHostname(req),
     redirectTo: targetBase(platform, req),
     userAgent: req.headers['user-agent'] || null,
-    mobile: { host: MOBILE_HOST, port: Number(MOBILE_PORT) },
-    pc: { host: PC_HOST, port: Number(PC_PORT) },
+    mobile: { host: MOBILE_HOST || '(host của client)', port: Number(MOBILE_PORT) },
+    pc: { host: PC_HOST || '(host của client)', port: Number(PC_PORT) },
   });
 });
 
@@ -110,9 +134,10 @@ app.use((req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log('============================================================');
-    console.log(`🔀 [ROUTER] J2ME Portal router đang chạy tại http://localhost:${PORT}`);
-    console.log(`   • MOBILE  -> http://${MOBILE_HOST}:${MOBILE_PORT}  (mobie.js)`);
-    console.log(`   • PC      -> http://${PC_HOST}:${PC_PORT}  (pc.js)`);
+    console.log(`🔀 [ROUTER] J2ME Portal router đang chạy tại http://localhost:${PORT}  (cũng truy cập được qua IP LAN/public của máy này)`);
+    console.log(`   • MOBILE  -> <host client đang dùng>:${MOBILE_PORT}  (mobie.js)${MOBILE_HOST ? '  [ép host=' + MOBILE_HOST + ']' : ''}`);
+    console.log(`   • PC      -> <host client đang dùng>:${PC_PORT}  (pc.js)${PC_HOST ? '  [ép host=' + PC_HOST + ']' : ''}`);
+    console.log('   • Chuyển hướng dùng ĐÚNG host/IP client truy cập (đã sửa lỗi localhost trên LAN/public).');
     console.log('   • Nhận diện: User-Agent (ép buộc: ?platform=mobile | ?platform=pc)');
     console.log('   • Server này CHỈ chuyển hướng — không chứa logic game.');
     console.log('   • Debug nhanh: GET /__whoami');

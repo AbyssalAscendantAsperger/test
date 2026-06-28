@@ -4,3 +4,7 @@ saves/
 # Phụ thuộc
 node_modules/
 jar
+# Fallback bundle cache (sinh tự động từ jar/) - KHÔNG commit
+assets_mobile/web/apps/
+assets_pc/web/apps/
+web/apps/

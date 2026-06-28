@@ -21,12 +21,16 @@ const app = express();
 const PORT = process.env.PORT || process.env.PC_PORT || 3002;
 
 // === CẤU HÌNH ĐƯỜNG DẪN ===
-// __dirname = thư mục java/ -> jar/ và saves/ được DÙNG CHUNG giữa mobie.js & pc.js.
-const JAVA_DIR = __dirname;   // Thư mục emulator gốc (chính là project/java)
-const JAR_DIR = path.join(JAVA_DIR, 'jar');            // DÙNG CHUNG (kho JAR)
-const SAVES_DIR = path.join(JAVA_DIR, 'saves');        // DÙNG CHUNG (save theo phiên/user)
+// SHARED_ROOT = thư mục java/ -> CHỈ jar/ và saves/ được DÙNG CHUNG giữa mobie.js & pc.js.
+const SHARED_ROOT = __dirname;
+// ASSETS_DIR = bản sao tài nguyên RIÊNG cho PC (emu, web, bld, libs, style, config...).
+// Tách hoàn toàn khỏi Mobile -> sửa emulator/runtime bên PC không ảnh hưởng Mobile.
+const ASSETS_DIR = path.join(__dirname, 'assets_pc');
+const JAVA_DIR = ASSETS_DIR; // tương thích tên cũ: mọi tài nguyên emu lấy từ assets riêng
+const JAR_DIR = path.join(SHARED_ROOT, 'jar');          // DÙNG CHUNG (kho JAR)
+const SAVES_DIR = path.join(SHARED_ROOT, 'saves');      // DÙNG CHUNG (save theo phiên/user)
 fs.mkdirSync(SAVES_DIR, { recursive: true });
-const FALLBACK_APPS_DIR = path.join(JAVA_DIR, 'web', 'apps');
+const FALLBACK_APPS_DIR = path.join(ASSETS_DIR, 'web', 'apps'); // RIÊNG (cache bundle của PC)
 fs.mkdirSync(FALLBACK_APPS_DIR, { recursive: true });
 
 // === SESSION: mỗi trình duyệt/user 1 sid (cookie) -> 1 file save riêng ===
@@ -71,7 +75,7 @@ app.use((req, res, next) => {
 const PUBLIC_DIR = path.join(__dirname, 'public_pc');
 app.use(express.static(PUBLIC_DIR));
 // Fallback web runtime (freej2me-web)
-app.use('/web', express.static(path.join(__dirname, 'web'), { acceptRanges: true }));
+app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
 
 // ==================== TRÍCH XUẤT ICON TỪ JAR ====================
 // JAR = file ZIP. Tự viết bộ đọc Central Directory (Node thuần + zlib).
@@ -825,7 +829,8 @@ if (require.main === module) {
     console.log(`🔒 Anti-leak: ${gameRegistry.size} game đã đăng ký (tên file được ẩn)`);
     console.log(`💾 Save (DÙNG CHUNG) tại: ${SAVES_DIR}`);
     console.log(`📦 JAR  (DÙNG CHUNG) tại: ${JAR_DIR}`);
-    console.log(`🚀 Logic RIÊNG cho PC — sửa thoải mái không ảnh hưởng Mobile.`);
+    console.log(`🎨 Assets RIÊNG (emu/web/style...) tại: ${ASSETS_DIR}`);
+    console.log(`🚀 Logic + tài nguyên RIÊNG cho PC — sửa thoải mái không ảnh hưởng Mobile.`);
   });
 }
 

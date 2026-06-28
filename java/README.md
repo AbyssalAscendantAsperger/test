@@ -23,6 +23,69 @@ Kiến trúc đã được tách thành **3 tiến trình**, mỗi nền tảng 
             saves/ (tiến trình lưu game)
 ```
 
+## Sửa lỗi: màn hình trắng Mode 4 khi chạy qua IP LAN/public
+
+**Nguyên nhân:** `server.js` (router 3000) trước đây **hardcode `localhost`** khi chuyển
+hướng (`MOBILE_HOST/PC_HOST = 'localhost'`). Khi client mở `http://<IP-server>:3000`,
+router lại đẩy về `http://localhost:3001/3002` — mà `localhost` là **máy của client**,
+không phải server → tải tài nguyên thất bại, Mode 4 (freej2me-web trong iframe) treo
+trắng màn hình. Chỉ chạy đúng khi test ngay trên máy server (localhost trùng nhau).
+
+**Cách sửa (chỉ trong `server.js`):**
+- Bỏ mặc định `localhost`. Router giờ lấy **đúng host/IP client đang truy cập** từ
+  header `Host` (và `X-Forwarded-Host` khi sau proxy) qua hàm `clientHostname()`, chỉ
+  đổi cổng. → `http://192.168.1.5:3000` ⇒ `http://192.168.1.5:3001/3002`.
+- Vẫn cho phép ép host riêng bằng env `MOBILE_HOST` / `PC_HOST` nếu muốn tách 2 máy.
+- Các URL game (Mode 1-4) vốn đã là **đường dẫn tương đối** (`/web/run.html?...`,
+  `/emu/main.html?...`) nên tự chạy đúng trên mọi IP — không cần sửa thêm.
+
+> Đã kiểm chứng live: `Host: 192.168.1.50:3000` → `Location: http://192.168.1.50:3001/`
+> (không còn localhost); `jarnova.com` → `jarnova.com:3002`; sau proxy `X-Forwarded-Host:
+> 10.0.0.7` → `10.0.0.7:3001`. Test tự động trong `build_check.js` (mục 5).
+
+## Tách HOÀN TOÀN — 2 web độc lập, chỉ chung jar/ & saves/
+
+Mọi tài nguyên emulator/runtime đã được nhân bản riêng cho từng nền tảng. Hai web
+giờ như **2 ứng dụng độc lập**, **chỉ dùng chung** `jar/` (kho game) và `saves/`
+(tiến trình lưu game).
+
+```
+java/
+├── jar/                 ← DÙNG CHUNG (kho game)
+├── saves/               ← DÙNG CHUNG (tiến trình, theo sid)
+│
+├── server.js            ← ROUTER 3000 (chỉ chuyển hướng)
+│
+├── mobie.js  (3001) ──► assets_mobile/  + public_mobile/   (RIÊNG 100%)
+├── pc.js     (3002) ──► assets_pc/      + public_pc/       (RIÊNG 100%)
+│
+├── assets_mobile/       ← RIÊNG: bld, libs, style, config, polyfill, js,
+│   ├── web/             │        web/ (freej2me-web runtime), main.html,
+│   │   └── apps/        │        keymap.js... (bản sao độc lập của emulator)
+│   ├── bld/ libs/ ...   │        web/apps/ = cache fallback RIÊNG của mobile
+├── assets_pc/           ← RIÊNG: y hệt cấu trúc trên nhưng của PC
+│   └── web/apps/        │        web/apps/ = cache fallback RIÊNG của PC
+│
+├── public_mobile/       ← RIÊNG: giao diện portal mobile
+└── public_pc/           ← RIÊNG: giao diện portal PC
+```
+
+| Tài nguyên | mobie.js (3001) | pc.js (3002) | Chung? |
+|------------|-----------------|--------------|--------|
+| Kho JAR `jar/` | `../jar` | `../jar` | ✅ CHUNG |
+| Save `saves/` | `../saves` | `../saves` | ✅ CHUNG |
+| Portal UI | `public_mobile/` | `public_pc/` | ❌ riêng |
+| `/emu` (bld, libs, style, config, main.html, keymap.js) | `assets_mobile/` | `assets_pc/` | ❌ riêng |
+| `/web` (freej2me-web runtime) | `assets_mobile/web/` | `assets_pc/web/` | ❌ riêng |
+| Fallback bundle cache | `assets_mobile/web/apps/` | `assets_pc/web/apps/` | ❌ riêng |
+| Logic server | `mobie.js` | `pc.js` | ❌ riêng |
+
+> Trong code: `SHARED_ROOT = __dirname` (chỉ cho `jar/` & `saves/`);
+> `ASSETS_DIR = assets_mobile|assets_pc` (cho toàn bộ emu/web/style...).
+> Sửa emulator/runtime/giao diện bên nào → chỉ động vào thư mục của bên đó,
+> **không ảnh hưởng** bên kia. Đã kiểm chứng: sửa `assets_pc/style/main.css` chỉ
+> hiện trên PC; bundle fallback PC chỉ ghi vào `assets_pc/web/apps/`.
+
 ## Frontend cũng tách riêng (giao diện / bàn phím ảo)
 
 Trước đây cả 2 server dùng chung `public/index.html` + `patch_keymap_v7.js` với

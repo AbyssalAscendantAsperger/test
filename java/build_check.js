@@ -69,12 +69,19 @@ if (leaked.length === 0) ok('server.js KHÔNG còn logic game (chỉ chuyển h�
 else bad('server.js vẫn còn logic game: ' + leaked.join(', '));
 if (/res\.redirect\(/.test(serverSrc)) ok('server.js có chuyển hướng (res.redirect)');
 else bad('server.js không thấy res.redirect');
+// Lỗi localhost: router KHÔNG được mặc định host = 'localhost' nữa
+if (/MOBILE_HOST = process\.env\.MOBILE_HOST \|\| null/.test(serverSrc) &&
+    /PC_HOST\s*=\s*process\.env\.PC_HOST\s*\|\|\s*null/.test(serverSrc))
+  ok('server.js KHÔNG hardcode localhost (dùng host client truy cập — sửa lỗi LAN/public)');
+else bad('server.js vẫn mặc định host = localhost (lỗi Mode4 trắng màn hình trên IP)');
+if (/clientHostname/.test(serverSrc)) ok('server.js có clientHostname() lấy host từ Host/X-Forwarded-Host');
+else bad('server.js thiếu clientHostname()');
 
 // ---- 4) jar/ & saves/ DÙNG CHUNG -------------------------------------------
-head('4) jar/ và saves/ được DÙNG CHUNG (cùng __dirname)');
-const sharePat = [/JAR_DIR = path\.join\(JAVA_DIR, 'jar'\)/, /SAVES_DIR = path\.join\(JAVA_DIR, 'saves'\)/, /JAVA_DIR = __dirname/];
+head('4) jar/ và saves/ được DÙNG CHUNG (cùng SHARED_ROOT = __dirname)');
+const sharePat = [/JAR_DIR = path\.join\(SHARED_ROOT, 'jar'\)/, /SAVES_DIR = path\.join\(SHARED_ROOT, 'saves'\)/, /SHARED_ROOT = __dirname/];
 const bothShare = sharePat.every(re => re.test(mobieSrc)) && sharePat.every(re => re.test(pcSrc));
-if (bothShare) ok('mobie.js & pc.js trỏ jar/ và saves/ vào cùng thư mục java/ (dùng chung)');
+if (bothShare) ok('mobie.js & pc.js trỏ jar/ và saves/ vào cùng SHARED_ROOT (dùng chung)');
 else bad('Đường dẫn jar/ hoặc saves/ không khớp giữa 2 file');
 
 // ---- 4b) FRONTEND tách riêng, không "cố tương thích" chéo -------------------
@@ -115,6 +122,50 @@ const mobPatch = fe('public_mobile/patch_keymap_v7.js');
 if (!/pc-key-bridge|PC_TO_MIDP|setupKeyboardMapping/.test(mobPatch)) ok('public_mobile keymap: no-op, KHÔNG còn code PC key-bridge');
 else bad('public_mobile keymap vẫn còn code PC');
 
+// ---- 4c) TÁCH HOÀN TOÀN tài nguyên emu/web, chỉ chung jar/ & saves/ ----------
+head('4c) Tách hết emu/web (assets riêng); chỉ jar/ & saves/ dùng chung');
+// Mỗi server trỏ ASSETS_DIR riêng
+if (/assets_mobile/.test(mobieSrc) && !/assets_pc/.test(mobieSrc)) ok('mobie.js dùng assets_mobile/ (không đụng assets_pc)');
+else bad('mobie.js không trỏ đúng assets_mobile/');
+if (/assets_pc/.test(pcSrc) && !/assets_mobile/.test(pcSrc)) ok('pc.js dùng assets_pc/ (không đụng assets_mobile)');
+else bad('pc.js không trỏ đúng assets_pc/');
+
+// jar/ & saves/ trỏ SHARED_ROOT (__dirname), KHÔNG nằm trong assets_*
+const sharedOk = src =>
+  /JAR_DIR = path\.join\(SHARED_ROOT, 'jar'\)/.test(src) &&
+  /SAVES_DIR = path\.join\(SHARED_ROOT, 'saves'\)/.test(src) &&
+  /SHARED_ROOT = __dirname/.test(src);
+if (sharedOk(mobieSrc) && sharedOk(pcSrc)) ok('jar/ & saves/ trỏ SHARED_ROOT (dùng chung), KHÔNG nằm trong assets_*');
+else bad('jar/ hoặc saves/ không trỏ SHARED_ROOT đúng cách');
+
+// /emu và /web phải lấy từ ASSETS_DIR (không phải __dirname/web hay __dirname root)
+const emuFromAssets = src => /express\.static\(JAVA_DIR\)/.test(src) && /const JAVA_DIR = ASSETS_DIR/.test(src);
+const webFromAssets = src => /express\.static\(path\.join\(ASSETS_DIR, 'web'\)/.test(src);
+if (emuFromAssets(mobieSrc) && emuFromAssets(pcSrc)) ok('/emu phục vụ từ assets riêng của từng nền tảng');
+else bad('/emu không phục vụ từ ASSETS_DIR');
+if (webFromAssets(mobieSrc) && webFromAssets(pcSrc)) ok('/web phục vụ từ assets riêng của từng nền tảng');
+else bad('/web không phục vụ từ ASSETS_DIR');
+
+// FALLBACK cache nằm trong assets riêng (không chung)
+if (/FALLBACK_APPS_DIR = path\.join\(ASSETS_DIR, 'web', 'apps'\)/.test(mobieSrc) &&
+    /FALLBACK_APPS_DIR = path\.join\(ASSETS_DIR, 'web', 'apps'\)/.test(pcSrc))
+  ok('Fallback bundle (web/apps) RIÊNG theo từng nền tảng');
+else bad('Fallback bundle không tách riêng');
+
+// Tồn tại 2 cây assets độc lập, mỗi cây có đủ emu assets
+const need = ['bld', 'libs', 'style', 'config', 'web', 'main.html', 'keymap.js'];
+for (const base of ['assets_mobile', 'assets_pc']) {
+  const missing = need.filter(n => !fs.existsSync(path.join(DIR, base, n)));
+  if (missing.length === 0) ok(`${base}/ có đủ tài nguyên emu (bld, libs, style, config, web, main.html, keymap.js)`);
+  else bad(`${base}/ thiếu: ${missing.join(', ')}`);
+}
+// jar/ & saves/ KHÔNG bị nhân bản vào assets (tránh nhầm là dùng chung)
+for (const base of ['assets_mobile', 'assets_pc']) {
+  const leaked = ['jar', 'saves'].filter(n => fs.existsSync(path.join(DIR, base, n)));
+  if (leaked.length === 0) ok(`${base}/ KHÔNG chứa bản sao jar/ hay saves/ (đúng: chỉ dùng chung ở root)`);
+  else bad(`${base}/ lỡ chứa: ${leaked.join(', ')} (phải dùng chung, không sao chép)`);
+}
+
 // ---- 5) Smoke test runtime --------------------------------------------------
 head('5) Smoke test: bật mobie(3001) + pc(3002) + router(3000)');
 const env = { ...process.env };
@@ -126,7 +177,7 @@ const servers = [
 let serverErr = '';
 servers.forEach(s => s.stderr.on('data', d => serverErr += d));
 
-function req(opts) {
+function req(opts, body) {
   return new Promise(resolve => {
     const r = http.request(opts, res => {
       let b = ''; res.on('data', c => b += c);
@@ -134,6 +185,7 @@ function req(opts) {
     });
     r.on('error', e => resolve({ status: 0, err: e.message }));
     r.setTimeout(4000, () => { r.destroy(); resolve({ status: 0, err: 'timeout' }); });
+    if (body != null) r.write(body);
     r.end();
   });
 }
@@ -166,6 +218,33 @@ const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
   if (ph.status === 200 && /content="pc"/.test(ph.body)) ok('pc.js (3002) phục vụ frontend PC (x-platform=pc)');
   else bad('pc.js (3002) không phục vụ frontend pc: ' + JSON.stringify({ status: ph.status }));
 
+  // emu/web assets phục vụ độc lập trên từng nền tảng
+  const me = await get(3001, '/emu/main.html');
+  if (me.status === 200) ok('mobie.js (3001) phục vụ /emu/main.html từ assets_mobile'); else bad('mobie /emu/main.html -> ' + me.status);
+  const mw = await get(3001, '/web/run.html');
+  if (mw.status === 200) ok('mobie.js (3001) phục vụ /web/run.html từ assets_mobile'); else bad('mobie /web/run.html -> ' + mw.status);
+  const pe = await get(3002, '/emu/main.html');
+  if (pe.status === 200) ok('pc.js (3002) phục vụ /emu/main.html từ assets_pc'); else bad('pc /emu/main.html -> ' + pe.status);
+  const pw = await get(3002, '/web/run.html');
+  if (pw.status === 200) ok('pc.js (3002) phục vụ /web/run.html từ assets_pc'); else bad('pc /web/run.html -> ' + pw.status);
+
+  // JAR & SAVE dùng chung: lưu save qua mobile, đọc lại qua PC (cùng sid cookie)
+  const jarsJson = JSON.parse((await get(3001, '/api/jars')).body || '{}');
+  const firstGame = (jarsJson.games || [])[0];
+  if (firstGame) {
+    const sid = 'sharedcheck' + Date.now().toString(16);
+    const payload = 'SAVE_SHARED_' + Date.now();
+    const post = await req({ host: 'localhost', port: 3001, path: '/api/save?gameId=' + firstGame.id, method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'Cookie': 'sid=' + sid } }, payload);
+    const load = await req({ host: 'localhost', port: 3002, path: '/api/load?gameId=' + firstGame.id, method: 'GET',
+      headers: { 'Cookie': 'sid=' + sid } });
+    if (load.status === 200 && load.body === payload)
+      ok('SAVE DÙNG CHUNG: lưu qua mobile(3001) đọc lại đúng qua pc(3002)');
+    else bad('Save không dùng chung giữa 2 nền tảng: ' + JSON.stringify({ status: load.status, body: (load.body||'').slice(0,40) }));
+  } else {
+    console.log('  (bỏ qua test save dùng chung: không có JAR trong jar/)');
+  }
+
   const rm = await get(3000, '/', { 'user-agent': UA_MOBILE });
   if (rm.status === 302 && /:3001/.test(rm.headers.location || '')) ok('router: UA mobile -> 302 :3001  (' + rm.headers.location + ')');
   else bad('router mobile sai: ' + JSON.stringify({ status: rm.status, loc: rm.headers && rm.headers.location }));
@@ -177,6 +256,32 @@ const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
   const rf = await get(3000, '/?platform=mobile', { 'user-agent': UA_DESKTOP });
   if (rf.status === 302 && /:3001/.test(rf.headers.location || '')) ok('router: ?platform=mobile ép buộc -> :3001');
   else bad('router ép buộc sai: ' + JSON.stringify({ status: rf.status, loc: rf.headers && rf.headers.location }));
+
+  // === REGRESSION: lỗi localhost trên IP LAN/public (Mode4 màn hình trắng) ===
+  // Giả lập client truy cập qua IP LAN: header Host = 192.168.1.50:3000
+  const lan = await get(3000, '/', { 'user-agent': UA_MOBILE, 'host': '192.168.1.50:3000' });
+  if (lan.status === 302 && /^https?:\/\/192\.168\.1\.50:3001\//.test(lan.headers.location || ''))
+    ok('IP LAN: Host 192.168.1.50:3000 -> redirect 192.168.1.50:3001 (KHÔNG còn localhost)  (' + lan.headers.location + ')');
+  else bad('LAN redirect sai (vẫn localhost?): ' + JSON.stringify({ status: lan.status, loc: lan.headers && lan.headers.location }));
+
+  // Giả lập client truy cập qua domain/public: Host = play.example.com
+  const pub = await get(3000, '/?platform=pc', { 'user-agent': UA_DESKTOP, 'host': 'play.example.com' });
+  if (pub.status === 302 && /^https?:\/\/play\.example\.com:3002\//.test(pub.headers.location || ''))
+    ok('Public: Host play.example.com -> redirect play.example.com:3002 (giữ đúng domain)  (' + pub.headers.location + ')');
+  else bad('Public redirect sai: ' + JSON.stringify({ status: pub.status, loc: pub.headers && pub.headers.location }));
+
+  // Phải KHÔNG xuất hiện 'localhost' khi client dùng IP/domain khác
+  const lanLoc = (lan.headers && lan.headers.location) || '';
+  const pubLoc = (pub.headers && pub.headers.location) || '';
+  if (lan.status === 302 && pub.status === 302 && !/localhost/.test(lanLoc) && !/localhost/.test(pubLoc))
+    ok('Redirect KHÔNG bao giờ ép localhost khi client dùng IP/domain thật');
+  else bad('Redirect vẫn lòi ra localhost khi client dùng IP/domain thật');
+
+  // X-Forwarded-Host (sau reverse proxy) cũng phải được tôn trọng
+  const fwd = await get(3000, '/', { 'user-agent': UA_MOBILE, 'host': 'internal:3000', 'x-forwarded-host': '10.0.0.7:3000' });
+  if (fwd.status === 302 && /^https?:\/\/10\.0\.0\.7:3001\//.test(fwd.headers.location || ''))
+    ok('Sau proxy: X-Forwarded-Host 10.0.0.7 được dùng -> 10.0.0.7:3001');
+  else bad('X-Forwarded-Host không được tôn trọng: ' + JSON.stringify({ status: fwd.status, loc: fwd.headers && fwd.headers.location }));
 
   // dọn dẹp
   servers.forEach(s => { try { s.kill('SIGKILL'); } catch {} });
