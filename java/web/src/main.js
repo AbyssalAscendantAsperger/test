@@ -302,11 +302,7 @@ async function init() {
                 location.reload();
             },
             async Java_pl_zb3_freej2me_bridge_shell_Shell_exit(lib) {
-                try {
-                    window.parent?.postMessage({type:'freej2me-exit', app: (new URLSearchParams(location.search)).get('app')}, '*');
-                    if (window.top !== window.self) window.top.postMessage({type:'freej2me-exit'}, '*');
-                } catch(e){}
-                setTimeout(()=>{ try { location.href = './'; } catch(e){} }, 50);
+                location.href = './';
             },
             async Java_pl_zb3_freej2me_bridge_shell_Shell_sthop(lib) {
                 debugger;

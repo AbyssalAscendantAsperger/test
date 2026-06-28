@@ -307,41 +307,12 @@ if (document.readyState === 'loading'){
   if(fr) observer.observe(fr, {attributes:true, attributeFilter:['src']});
 }
 
-// Also patch fitFrame to be cross-origin safe
-const _origFitFrame = window.fitFrame;
-window.fitFrame = function(){
-  try {
-    if (currentEngineKind === 'freej2me') {
-      // isolated cross-origin – cannot access canvas – do CSS responsive fit
-      const frame = document.getElementById('emulatorFrame');
-      const screenFrame = document.getElementById('screenFrame');
-      const screenArea = document.getElementById('screenArea');
-      if (!frame || !screenFrame || !screenArea) return;
-      // use resolution from current game registry? fallback 240x320
-      let cw = 240, ch = 320;
-      // try to get from game list
-      try {
-        if (window.currentGameId && window.allGames) {
-          const g = allGames.find(x=>x.id===currentGameId);
-          if (g && g.resolution) { cw = g.resolution.width; ch = g.resolution.height; }
-        }
-      } catch(e){}
-      const maxW = screenArea.clientWidth - 8;
-      const maxH = screenArea.clientHeight - 8;
-      if (maxW<=0||maxH<=0) return;
-      const scale = Math.min(maxW / cw, maxH / ch);
-      const realW = Math.floor(cw * scale);
-      const realH = Math.floor(ch * scale);
-      screenFrame.style.width = realW + 'px';
-      screenFrame.style.height = realH + 'px';
-      frame.style.width = '100%';
-      frame.style.height = '100%';
-      frame.style.transform = 'none';
-      return;
-    }
-  } catch(e){}
-  return _origFitFrame.apply(this, arguments);
-};
+// ----- FITFRAME PATCH v2.1 – PC COMPAT -----
+// Mode4 giờ same-origin + COOP/COEP, nên fitFrame gốc trong index.html
+// đọc được canvas#display bình thường. 
+// => BỎ HOÀN TOÀN override fitFrame, dùng fitFrame gốc cho cả PC + mobile
+// (override cũ ép iframe 100% làm sai scale)
+// Không override nữa, để window.fitFrame gốc chạy.
 
-console.log('%c[Patch Mode4] READY – isolated random port, clean DOM, save separated', 'color:#0f0;font-weight:bold');
+console.log('%c[Patch Mode4 v2.1] READY – COOP/COEP same-origin, use ORIGINAL fitFrame, PC+Mobile', 'color:#0f0;font-weight:bold');
 })();

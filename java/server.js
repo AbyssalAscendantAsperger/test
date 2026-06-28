@@ -5,8 +5,6 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const http = require('http');
 const https = require('https');
-// === FREEJ2ME RANDOM PORT MANAGER ===
-const { startFreej2meHost, stopAllFreej2meHosts } = require('./freej2me-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -700,7 +698,7 @@ app.get('/api/icon/:id', (req, res) => {
 });
 
 // API: Khởi chạy game -> phát token + tự set canvasSize từ resolution
-app.get('/api/launch', async (req, res) => {
+app.get('/api/launch', (req, res) => {
   if (!rateLimitCheck(req.sid)) {
     return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
   }
@@ -730,11 +728,6 @@ app.get('/api/launch', async (req, res) => {
     }
     const launcherUrl = `/web/index.html?mobile=1&fractionScale=1`;
     return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
-  }
-
-  if (modeParam === 'enginemode5-j2me-for-web') {
-    const runUrl = `/emu/web5/run.html?jar=/emu/jar/${token}.jar&canvasSize=${canvasSize}`;
-    return res.json({ success: true, url: runUrl, resolution: r, engine: 'freej2me-web' });
   }
 
   // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
