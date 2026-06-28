@@ -73,8 +73,11 @@ async function cleanResetEmulator(isFreej2me){
     const newFrame = document.createElement('iframe');
     newFrame.id = 'emulatorFrame';
     newFrame.className = 'emulator-frame';
-    newFrame.setAttribute('allow', 'cross-origin-isolated');
-    newFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-downloads');
+    // PATCH v7.3: NO sandbox – keep exactly like original index.html to avoid CheerpJ break
+    // newFrame.setAttribute('allow', 'cross-origin-isolated');
+    // newFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-downloads');
+    newFrame.setAttribute('tabindex', '0');
+    newFrame.setAttribute('allowfullscreen', 'true');
     // important: append INTO screenFrame, NOT screenArea
     screenFrame.appendChild(newFrame);
     // reset fit cache
