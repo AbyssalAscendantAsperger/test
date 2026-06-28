@@ -21,6 +21,7 @@ import { Context } from "../context/Context";
 import { JarClassPath } from "../loader/JarClassPath";
 import { ClassLoader } from "../../vm-core/classfile/class-loader";
 import { SystemClassPath } from "../../vm-core/classfile/system-class-path";
+import { initInstructions } from "../../vm-core/interpreter/instructions";
 
 export interface GameConfig {
     jarUrl?: string;
@@ -40,6 +41,8 @@ export class Launcher {
     constructor(config: GameConfig) {
         this.config = config;
         this.loader = new JarLoader();
+        // 初始化 JVM 指令集，确保装饰器正确注册所有操作码
+        initInstructions();
     }
 
     /**
@@ -81,13 +84,20 @@ export class Launcher {
         }
         
         // 2. 解析 Manifest
-        const manifestPath = 'META-INF/MANIFEST.MF';
-        const data = this.loader.getFile(manifestPath);
+        const manifestPaths = ['META-INF/MANIFEST.MF', 'meta-inf/manifest.mf', 'META-INF/manifest.mf', 'meta-inf/MANIFEST.MF'];
+        let data = null;
+        for (const p of manifestPaths) {
+            if (this.loader.fileExists(p)) {
+                data = this.loader.getFile(p);
+                break;
+            }
+        }
         if (data) {
-            const text = new TextDecoder().decode(data);
-            // 简单的正则匹配 MIDlet-1: Name, Icon, Class
-            // 注意: 实际 Manifest 可能折行，这里简化处理
-            const match = text.match(/MIDlet-1:\s*[^,]+,\s*[^,]*,\s*(\S+)/);
+            let text = new TextDecoder().decode(data);
+            // 展开折行的 Manifest 数据
+            text = text.replace(/\r\n[ \t]|\n[ \t]|\r[ \t]/g, '');
+            // 简单的正则匹配 MIDlet-1: Name, Icon, Class (忽略大小写)
+            const match = text.match(/MIDlet-1:\s*[^,]+,\s*[^,]*,\s*(\S+)/i);
             if (match && match[1]) {
                 return match[1].trim();
             }

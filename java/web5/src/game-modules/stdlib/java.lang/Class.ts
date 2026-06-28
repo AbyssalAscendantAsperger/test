@@ -171,25 +171,55 @@ export function registerClassNatives(): void {
       throw new Error("NullPointerException");
     }
     
-    // TODO: 从 String 对象获取字符串值
-    // 暂时假设 nameObj 就是 string (仅用于测试)
-    // 实际应该调用 StringUtils.getStringValue(nameObj)
     const name = nameObj as unknown as string; 
     
-    const stream = thisObj.getResourceAsStream(name);
+    const loader = Context.getInstance().getJarLoader();
+    let pathName = name;
+    if (name.startsWith('/')) {
+        pathName = name.substring(1);
+    } else {
+        const className = thisObj.getName();
+        const lastSlash = className.lastIndexOf('/');
+        let pkg = "";
+        if (lastSlash >= 0) {
+            pkg = className.substring(0, lastSlash + 1);
+        }
+        pathName = pkg + name;
+    }
+
+    const data = loader.getFile(pathName);
+    if (!data) {
+      frame.stack.push(null);
+      return;
+    }
     
-    // 这里需要返回 InputStream 的 JavaObject 包装
-    // 但目前我们还没有 InputStream 的 Java 类定义和包装逻辑
-    // 所以这里会有一个类型不匹配的问题。
-    // 暂时返回 null 或者抛出未实现异常
-    // 为了打通流程，我们假设 stream 就是 JavaObject (这在 TS 层面是不对的，但在 JS 运行时可能混过去)
-    
-    // 正确做法:
-    // 1. 创建 java.io.ByteArrayInputStream 的 ClassInfo
-    // 2. 创建 JavaObject 实例
-    // 3. 将 TS 的 InputStream 实例关联到 JavaObject (作为 native 句柄)
-    
-    console.warn("getResourceAsStream called but JavaObject wrapping is not implemented yet.");
-    frame.stack.push(null); 
+    try {
+      const classLoader = (thread as any).classLoader;
+      const jvmExecutorModule = require('../../../vm-core/vm-executor');
+      const executor = new jvmExecutorModule.VMExecutor(classLoader);
+      
+      // 1. Create Java byte array [B
+      const { JavaArray, ArrayType } = require('../../../vm-core/runtime/array');
+      const arrayClass = classLoader.loadClass('[B');
+      
+      const length = data.length;
+      const byteArray = new JavaArray(arrayClass, ArrayType.BYTE, length);
+      for (let i = 0; i < length; i++) {
+        byteArray.setElement(i, data[i]);
+      }
+      
+      // 2. Create ByteArrayInputStream JavaObject
+      const baisClass = classLoader.loadClass('java/io/ByteArrayInputStream');
+      const { JavaObject } = require('../../../vm-core/runtime/object');
+      const baisObj = new JavaObject(baisClass);
+      
+      // 3. Invoke constructor <init>([B)V
+      executor.invokeConstructor(baisObj, "([B)V", [byteArray]);
+      
+      frame.stack.push(baisObj);
+    } catch (e) {
+      console.error("Failed to wrap getResourceAsStream:", e);
+      frame.stack.push(null);
+    }
   });
 }

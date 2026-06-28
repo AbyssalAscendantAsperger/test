@@ -22,6 +22,7 @@ import { Frame } from "../frame";
 import { Thread } from "../../threading/thread";
 import { ClassLoader } from "../../classfile/class-loader";
 import { JavaObject } from "../../runtime/object";
+import { ConstantTag } from "../../core/constants";
 
 export class ConstantInstructions {
   @Instruction(Opcode.NOP)
@@ -98,6 +99,48 @@ export class ConstantInstructions {
     frame.pc++;
   }
 
+  @Instruction(Opcode.LCONST_0)
+  static lconst_0(frame: Frame, thread: Thread): void {
+    frame.stack.push(0n);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.LCONST_1)
+  static lconst_1(frame: Frame, thread: Thread): void {
+    frame.stack.push(1n);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.FCONST_0)
+  static fconst_0(frame: Frame, thread: Thread): void {
+    frame.stack.push(0.0);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.FCONST_1)
+  static fconst_1(frame: Frame, thread: Thread): void {
+    frame.stack.push(1.0);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.FCONST_2)
+  static fconst_2(frame: Frame, thread: Thread): void {
+    frame.stack.push(2.0);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.DCONST_0)
+  static dconst_0(frame: Frame, thread: Thread): void {
+    frame.stack.push(0.0);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.DCONST_1)
+  static dconst_1(frame: Frame, thread: Thread): void {
+    frame.stack.push(1.0);
+    frame.pc++;
+  }
+
   @Instruction(Opcode.BIPUSH)
   static bipush(frame: Frame, thread: Thread): void {
     const byte = frame.method.getCode()!.code[frame.pc + 1];
@@ -105,5 +148,59 @@ export class ConstantInstructions {
     const value = (byte << 24) >> 24;
     frame.stack.push(value);
     frame.pc += 2;
+  }
+
+  @Instruction(Opcode.SIPUSH)
+  static sipush(frame: Frame, thread: Thread): void {
+    const code = frame.method.getCode()!.code;
+    const b1 = code[frame.pc + 1];
+    const b2 = code[frame.pc + 2];
+    const shortVal = (b1 << 8) | b2;
+    // 符号扩展
+    const value = (shortVal << 16) >> 16;
+    frame.stack.push(value);
+    frame.pc += 3;
+  }
+
+  @Instruction(Opcode.LDC)
+  static ldc(frame: Frame, thread: Thread): void {
+    const code = frame.method.getCode()!.code;
+    const index = code[frame.pc + 1];
+    ConstantInstructions.pushConstant(frame, index);
+    frame.pc += 2;
+  }
+
+  @Instruction(Opcode.LDC_W)
+  static ldc_w(frame: Frame, thread: Thread): void {
+    const code = frame.method.getCode()!.code;
+    const b1 = code[frame.pc + 1];
+    const b2 = code[frame.pc + 2];
+    const index = (b1 << 8) | b2;
+    ConstantInstructions.pushConstant(frame, index);
+    frame.pc += 3;
+  }
+
+  @Instruction(Opcode.LDC2_W)
+  static ldc2_w(frame: Frame, thread: Thread): void {
+    const code = frame.method.getCode()!.code;
+    const b1 = code[frame.pc + 1];
+    const b2 = code[frame.pc + 2];
+    const index = (b1 << 8) | b2;
+    ConstantInstructions.pushConstant(frame, index);
+    frame.pc += 3;
+  }
+
+  private static pushConstant(frame: Frame, index: number): void {
+    const cp = frame.method.classInfo.constantPool;
+    const entry = cp.get(index);
+    if (entry.tag === ConstantTag.Integer || entry.tag === ConstantTag.Float || entry.tag === ConstantTag.Long || entry.tag === ConstantTag.Double) {
+      frame.stack.push((entry as any).value);
+    } else if (entry.tag === ConstantTag.String) {
+      frame.stack.push(cp.getString(index));
+    } else if (entry.tag === ConstantTag.Class) {
+      frame.stack.push(cp.getClassName(index));
+    } else {
+      throw new Error(`Unsupported LDC constant pool tag: ${entry.tag}`);
+    }
   }
 }

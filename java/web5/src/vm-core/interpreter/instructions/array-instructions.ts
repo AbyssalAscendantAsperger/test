@@ -26,7 +26,7 @@ import { Opcode } from "../../bytecode/opcodes";
 import { Instruction } from "../instruction";
 import { Frame } from "../frame";
 import { Thread } from "../../threading/thread";
-import { JavaArray, ArrayType, getArrayTypeFromDescriptor } from "../../runtime/array";
+import { JavaArray, ArrayType } from "../../runtime/array";
 import { ClassLoader } from "../../classfile/class-loader";
 
 export class ArrayInstructions {
@@ -72,7 +72,7 @@ export class ArrayInstructions {
     
     // 加载数组类
     const classLoader = frame.method.classInfo.classLoader || new ClassLoader({ readClass: () => null });
-    const arrayClass = classLoader.loadClass(this.getArrayClassName(componentType));
+    const arrayClass = classLoader.loadClass(ArrayInstructions.getArrayClassName(componentType));
     
     // 创建数组对象
     const array = new JavaArray(arrayClass, componentType, count);
@@ -100,7 +100,7 @@ export class ArrayInstructions {
     
     // 加载数组类（例如 [Ljava/lang/Object;）
     const classLoader = frame.method.classInfo.classLoader || new ClassLoader({ readClass: () => null });
-    const arrayClassName = this.getObjectArrayClassName(componentClassName);
+    const arrayClassName = ArrayInstructions.getObjectArrayClassName(componentClassName);
     const arrayClass = classLoader.loadClass(arrayClassName);
     
     // 创建数组对象
@@ -114,13 +114,13 @@ export class ArrayInstructions {
 
   @Instruction(Opcode.ARRAYLENGTH)
   static arraylength(frame: Frame, thread: Thread): void {
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
@@ -131,21 +131,17 @@ export class ArrayInstructions {
   @Instruction(Opcode.AALOAD)
   static aaload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    frame.stack.push(arrayref[index]);
+    frame.stack.push(arrayref.getElement(index));
     frame.pc++;
   }
 
@@ -153,43 +149,34 @@ export class ArrayInstructions {
   static aastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.pop();
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    arrayref[index] = value;
+    arrayref.setElement(index, value);
     frame.pc++;
   }
 
   @Instruction(Opcode.BALOAD)
   static baload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // byte数组，需要符号扩展到int
-    const value = arrayref[index] & 0xFF;
+    const value = (arrayref.getElement(index) as number) & 0xFF;
     frame.stack.push((value << 24) >> 24);
     frame.pc++;
   }
@@ -198,44 +185,34 @@ export class ArrayInstructions {
   static bastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.popInt();
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // 存储为byte（取低8位）
-    arrayref[index] = value & 0xFF;
+    arrayref.setElement(index, value & 0xFF);
     frame.pc++;
   }
 
   @Instruction(Opcode.CALOAD)
   static caload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // char数组，零扩展到int
-    frame.stack.push(arrayref[index] & 0xFFFF);
+    frame.stack.push((arrayref.getElement(index) as number) & 0xFFFF);
     frame.pc++;
   }
 
@@ -243,44 +220,34 @@ export class ArrayInstructions {
   static castore(frame: Frame, thread: Thread): void {
     const value = frame.stack.popInt();
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // 存储为char（取低16位）
-    arrayref[index] = value & 0xFFFF;
+    arrayref.setElement(index, value & 0xFFFF);
     frame.pc++;
   }
 
   @Instruction(Opcode.SALOAD)
   static saload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // short数组，符号扩展到int
-    const value = arrayref[index] & 0xFFFF;
+    const value = (arrayref.getElement(index) as number) & 0xFFFF;
     frame.stack.push((value << 16) >> 16);
     frame.pc++;
   }
@@ -289,43 +256,34 @@ export class ArrayInstructions {
   static sastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.popInt();
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    // 存储为short（取低16位）
-    arrayref[index] = value & 0xFFFF;
+    arrayref.setElement(index, value & 0xFFFF);
     frame.pc++;
   }
 
   @Instruction(Opcode.IALOAD)
   static iaload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    frame.stack.push(arrayref[index]);
+    frame.stack.push(arrayref.getElement(index));
     frame.pc++;
   }
 
@@ -333,42 +291,34 @@ export class ArrayInstructions {
   static iastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.popInt();
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    arrayref[index] = value;
+    arrayref.setElement(index, value);
     frame.pc++;
   }
 
   @Instruction(Opcode.LALOAD)
   static laload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    frame.stack.push(arrayref[index]);
+    frame.stack.push(arrayref.getElement(index));
     frame.pc++;
   }
 
@@ -376,42 +326,34 @@ export class ArrayInstructions {
   static lastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.pop(); // long value
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    arrayref[index] = value;
+    arrayref.setElement(index, value);
     frame.pc++;
   }
 
   @Instruction(Opcode.FALOAD)
   static faload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    frame.stack.push(arrayref[index]);
+    frame.stack.push(arrayref.getElement(index));
     frame.pc++;
   }
 
@@ -419,42 +361,34 @@ export class ArrayInstructions {
   static fastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.pop(); // float value
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    arrayref[index] = value;
+    arrayref.setElement(index, value);
     frame.pc++;
   }
 
   @Instruction(Opcode.DALOAD)
   static daload(frame: Frame, thread: Thread): void {
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
-    }
-    
-    frame.stack.push(arrayref[index]);
+    frame.stack.push(arrayref.getElement(index));
     frame.pc++;
   }
 
@@ -462,22 +396,78 @@ export class ArrayInstructions {
   static dastore(frame: Frame, thread: Thread): void {
     const value = frame.stack.pop(); // double value
     const index = frame.stack.popInt();
-    const arrayref = frame.stack.pop();
+    const arrayref = frame.stack.pop() as JavaArray | null;
     
     if (arrayref === null) {
       throw new Error("NullPointerException");
     }
     
-    if (!Array.isArray(arrayref)) {
+    if (!(arrayref instanceof JavaArray)) {
       throw new Error("Invalid array reference");
     }
     
-    if (index < 0 || index >= arrayref.length) {
-      throw new Error("ArrayIndexOutOfBoundsException");
+    arrayref.setElement(index, value);
+    frame.pc++;
+  }
+
+  @Instruction(Opcode.MULTIANEWARRAY)
+  static multianewarray(frame: Frame, thread: Thread): void {
+    const code = frame.method.getCode()!.code;
+    const index = (code[frame.pc + 1] << 8) | code[frame.pc + 2];
+    const dimensions = code[frame.pc + 3];
+    
+    const counts: number[] = [];
+    for (let i = 0; i < dimensions; i++) {
+      counts.unshift(frame.stack.popInt());
     }
     
-    arrayref[index] = value;
-    frame.pc++;
+    const className = frame.method.classInfo.constantPool.getClassName(index);
+    const classLoader = frame.method.classInfo.classLoader || new ClassLoader({ readClass: () => null });
+    
+    const array = ArrayInstructions.createMultiArray(classLoader, className, counts, 0);
+    frame.stack.push(array);
+    frame.pc += 4;
+  }
+
+  private static createMultiArray(classLoader: ClassLoader, arrayClassName: string, counts: number[], dimIndex: number): JavaArray {
+    const count = counts[dimIndex];
+    if (count < 0) {
+      throw new Error("NegativeArraySizeException");
+    }
+    
+    // Resolve component type
+    const isLastDim = dimIndex === counts.length - 1;
+    const arrayClass = classLoader.loadClass(arrayClassName);
+    
+    if (isLastDim) {
+      // The last dimension contains the actual primitive or object type
+      // e.g. [[I -> [I -> I
+      const componentTypeChar = arrayClassName.charAt(arrayClassName.lastIndexOf('[') + 1);
+      let componentType: ArrayType;
+      switch (componentTypeChar) {
+        case 'Z': componentType = ArrayType.BOOLEAN; break;
+        case 'B': componentType = ArrayType.BYTE; break;
+        case 'C': componentType = ArrayType.CHAR; break;
+        case 'S': componentType = ArrayType.SHORT; break;
+        case 'I': componentType = ArrayType.INT; break;
+        case 'J': componentType = ArrayType.LONG; break;
+        case 'F': componentType = ArrayType.FLOAT; break;
+        case 'D': componentType = ArrayType.DOUBLE; break;
+        default: componentType = ArrayType.OBJECT; break;
+      }
+      return new JavaArray(arrayClass, componentType, count);
+    } else {
+      // Create an array of arrays (OBJECT type)
+      const array = new JavaArray(arrayClass, ArrayType.OBJECT, count);
+      
+      // Recursively populate elements
+      // The inner elements will have one less '[' dimension
+      const nextArrayClassName = arrayClassName.substring(1);
+      for (let i = 0; i < count; i++) {
+        array.setElement(i, this.createMultiArray(classLoader, nextArrayClassName, counts, dimIndex + 1));
+      }
+      return array;
+    }
   }
 
   /**

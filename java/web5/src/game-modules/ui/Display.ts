@@ -78,12 +78,12 @@ export class Display {
    */
   private createHTMLCanvas(): void {
     // 查找现有的 Canvas
-    let canvas = document.getElementById('j2me-canvas') as HTMLCanvasElement;
+    let canvas = document.getElementById('display') as HTMLCanvasElement || document.getElementById('j2me-canvas') as HTMLCanvasElement;
 
     if (!canvas) {
       // 创建新的 Canvas
       canvas = document.createElement('canvas');
-      canvas.id = 'j2me-canvas';
+      canvas.id = 'display';
       canvas.style.border = '1px solid #000';
       canvas.style.display = 'block';
       canvas.style.margin = '0 auto';
@@ -155,7 +155,8 @@ export class Display {
    * 映射键盘按键到 J2ME 按键码
    */
   private mapKeyCode(key: string): number {
-    switch (key) {
+    const k = key.toLowerCase();
+    switch (k) {
       case '0': return Canvas.KEY_NUM0;
       case '1': return Canvas.KEY_NUM1;
       case '2': return Canvas.KEY_NUM2;
@@ -168,12 +169,19 @@ export class Display {
       case '9': return Canvas.KEY_NUM9;
       case '*': return Canvas.KEY_STAR;
       case '#': return Canvas.KEY_POUND;
-      case 'ArrowUp': return Canvas.KEY_NUM2;
-      case 'ArrowDown': return Canvas.KEY_NUM8;
-      case 'ArrowLeft': return Canvas.KEY_NUM4;
-      case 'ArrowRight': return Canvas.KEY_NUM6;
-      case 'Enter': return Canvas.KEY_NUM5;
+      case 'q': return -6; // Soft Left
+      case 'w': return -7; // Soft Right
+      case 'e': return Canvas.KEY_STAR;
+      case 'r': return Canvas.KEY_POUND;
+      case 'arrowup': return Canvas.KEY_NUM2;
+      case 'arrowdown': return Canvas.KEY_NUM8;
+      case 'arrowleft': return Canvas.KEY_NUM4;
+      case 'arrowright': return Canvas.KEY_NUM6;
+      case 'enter': return Canvas.KEY_NUM5;
       case ' ': return Canvas.KEY_NUM5;
+      case 'f1': return 122; // Aux/Custom
+      case 'f2': return 99;  // Aux/Custom
+      case 'escape': return -7; // Soft Right / Escape
       default: return 0;
     }
   }

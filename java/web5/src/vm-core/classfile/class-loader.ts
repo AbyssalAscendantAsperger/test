@@ -75,6 +75,9 @@ export class ClassLoader {
     if (this.systemClassPath && this.systemClassPath.isSystemClass(className)) {
       const systemClass = this.systemClassPath.getSystemClass(className);
       if (systemClass) {
+        // 设置 classLoader 引用
+        (systemClass as any).classLoader = this;
+
         // 放入缓存
         this.classes.set(className, systemClass);
         
@@ -100,6 +103,7 @@ export class ClassLoader {
 
     // 5. 解析 Class 文件
     const classInfo = new ClassInfo(data);
+    (classInfo as any).classLoader = this;
 
     // 6. 验证类名
     if (classInfo.thisClass !== className) {
@@ -149,6 +153,7 @@ export class ClassLoader {
       getStaticFields: () => [],
       // ...
     } as unknown as ClassInfo;
+    (classInfo as any).classLoader = this;
 
     this.classes.set(className, classInfo);
     

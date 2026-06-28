@@ -95,7 +95,7 @@ export class InvokeInstructions {
     }
     
     // 调用方法
-    this.invokeMethod(frame, thread, method);
+    InvokeInstructions.invokeMethod(frame, thread, method);
     
     // 更新 PC
     frame.pc += 3;
@@ -113,9 +113,10 @@ export class InvokeInstructions {
     // 从常量池解析方法引用
     const methodRef = frame.method.classInfo.constantPool.getMethodRef(index);
     
-    // 获取 this 对象（在栈顶）
-    const argCount = MethodInfo.prototype.getParameterCount.call({ descriptor: methodRef.descriptor });
-    const thisObj = frame.stack.peek() as JavaObject | null;
+    // 获取 this 对象 (位于参数下方)
+    const argCount = MethodInfo.prototype.getParameterTypes.call({ descriptor: methodRef.descriptor }).length;
+    console.log(`[DEBUG] invokevirtual: ${methodRef.className}.${methodRef.methodName}${methodRef.descriptor}, argCount=${argCount}, stackSize=${frame.stack.size()}, stack: ${frame.stack.toString()}`);
+    const thisObj = frame.stack.peek(argCount) as JavaObject | null;
     
     if (!thisObj) {
       throw new Error("NullPointerException: Cannot invoke method on null object");
@@ -144,7 +145,7 @@ export class InvokeInstructions {
     }
     
     // 调用方法
-    this.invokeMethod(frame, thread, method);
+    InvokeInstructions.invokeMethod(frame, thread, method);
     
     // 更新 PC
     frame.pc += 3;
@@ -179,7 +180,7 @@ export class InvokeInstructions {
     }
     
     // 调用方法
-    this.invokeMethod(frame, thread, method);
+    InvokeInstructions.invokeMethod(frame, thread, method);
     
     // 更新 PC
     frame.pc += 3;

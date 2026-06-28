@@ -23,6 +23,7 @@
 
 import { ClassPath } from "./class-loader";
 import { ClassInfo } from "./class-info";
+import { MethodInfo } from "./method-info";
 
 /**
  * 系统类路径
@@ -213,6 +214,111 @@ export class SystemClassPath implements ClassPath {
         { name: "<init>", descriptor: "(Ljava/lang/String;)V", accessFlags: 0x0001 },
       ]
     });
+
+    // java.lang.Runnable
+    this.createSystemClass("java/lang/Runnable", null, [], {
+      methods: [
+        { name: "run", descriptor: "()V", accessFlags: 0x0401 },
+      ]
+    });
+
+    // java.util.Random
+    this.createSystemClass("java/util/Random", "java/lang/Object", [], {
+      methods: [
+        { name: "<init>", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "<init>", descriptor: "(J)V", accessFlags: 0x0001 },
+        { name: "nextInt", descriptor: "()I", accessFlags: 0x0001 },
+        { name: "nextInt", descriptor: "(I)I", accessFlags: 0x0001 },
+      ]
+    });
+
+    // java.lang.Runtime
+    this.createSystemClass("java/lang/Runtime", "java/lang/Object", [], {
+      methods: [
+        { name: "getRuntime", descriptor: "()Ljava/lang/Runtime;", accessFlags: 0x0009 },
+        { name: "gc", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "freeMemory", descriptor: "()J", accessFlags: 0x0001 },
+        { name: "totalMemory", descriptor: "()J", accessFlags: 0x0001 },
+      ]
+    });
+
+    // java.lang.StringBuffer
+    this.createSystemClass("java/lang/StringBuffer", "java/lang/Object", [], {
+      methods: [
+        { name: "<init>", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "<init>", descriptor: "(Ljava/lang/String;)V", accessFlags: 0x0001 },
+        { name: "append", descriptor: "(Ljava/lang/String;)Ljava/lang/StringBuffer;", accessFlags: 0x0001 },
+        { name: "append", descriptor: "(I)Ljava/lang/StringBuffer;", accessFlags: 0x0001 },
+        { name: "append", descriptor: "(C)Ljava/lang/StringBuffer;", accessFlags: 0x0001 },
+        { name: "append", descriptor: "(Z)Ljava/lang/StringBuffer;", accessFlags: 0x0001 },
+        { name: "toString", descriptor: "()Ljava/lang/String;", accessFlags: 0x0001 },
+      ]
+    });
+
+    // javax.microedition.lcdui.Displayable
+    this.createSystemClass("javax/microedition/lcdui/Displayable", "java/lang/Object", [], {
+      methods: [
+        { name: "<init>", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "isShown", descriptor: "()Z", accessFlags: 0x0001 },
+        { name: "setTitle", descriptor: "(Ljava/lang/String;)V", accessFlags: 0x0001 },
+        { name: "getTitle", descriptor: "()Ljava/lang/String;", accessFlags: 0x0001 },
+      ]
+    });
+
+    // javax.microedition.lcdui.Canvas
+    this.createSystemClass("javax/microedition/lcdui/Canvas", "javax/microedition/lcdui/Displayable", [], {
+      fields: [
+        { name: "UP", descriptor: "I", accessFlags: 0x0019 },
+        { name: "DOWN", descriptor: "I", accessFlags: 0x0019 },
+        { name: "LEFT", descriptor: "I", accessFlags: 0x0019 },
+        { name: "RIGHT", descriptor: "I", accessFlags: 0x0019 },
+        { name: "FIRE", descriptor: "I", accessFlags: 0x0019 },
+        { name: "GAME_A", descriptor: "I", accessFlags: 0x0019 },
+        { name: "GAME_B", descriptor: "I", accessFlags: 0x0019 },
+        { name: "GAME_C", descriptor: "I", accessFlags: 0x0019 },
+        { name: "GAME_D", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM0", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM1", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM2", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM3", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM4", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM5", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM6", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM7", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM8", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_NUM9", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_STAR", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_POUND", descriptor: "I", accessFlags: 0x0019 },
+      ],
+      methods: [
+        { name: "<init>", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "isDoubleBuffered", descriptor: "()Z", accessFlags: 0x0001 },
+        { name: "hasPointerEvents", descriptor: "()Z", accessFlags: 0x0001 },
+        { name: "hasPointerMotionEvents", descriptor: "()Z", accessFlags: 0x0001 },
+        { name: "hasRepeatEvents", descriptor: "()Z", accessFlags: 0x0001 },
+        { name: "getKeyName", descriptor: "(I)Ljava/lang/String;", accessFlags: 0x0001 },
+        { name: "getGameAction", descriptor: "(I)I", accessFlags: 0x0001 },
+        { name: "getKeyCode", descriptor: "(I)I", accessFlags: 0x0001 },
+        { name: "repaint", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "repaint", descriptor: "(IIII)V", accessFlags: 0x0001 },
+        { name: "serviceRepaints", descriptor: "()V", accessFlags: 0x0001 },
+        { name: "getWidth", descriptor: "()I", accessFlags: 0x0001 },
+        { name: "getHeight", descriptor: "()I", accessFlags: 0x0001 },
+      ]
+    });
+
+    // com.nokia.mid.ui.FullCanvas
+    this.createSystemClass("com/nokia/mid/ui/FullCanvas", "javax/microedition/lcdui/Canvas", [], {
+      fields: [
+        { name: "KEY_SOFTKEY1", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_SOFTKEY2", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_SEND", descriptor: "I", accessFlags: 0x0019 },
+        { name: "KEY_END", descriptor: "I", accessFlags: 0x0019 },
+      ],
+      methods: [
+        { name: "<init>", descriptor: "()V", accessFlags: 0x0001 },
+      ]
+    });
   }
 
   /**
@@ -231,13 +337,25 @@ export class SystemClassPath implements ClassPath {
       methods?: Array<{ name: string; descriptor: string; accessFlags: number }>;
     } = {}
   ): void {
+    const methodsObj = (members.methods || []).map((m: any) => {
+      const methodInstance = {
+        accessFlags: m.accessFlags,
+        name: m.name,
+        descriptor: m.descriptor,
+        attributes: [],
+        classInfo: null
+      };
+      Object.setPrototypeOf(methodInstance, MethodInfo.prototype);
+      return methodInstance;
+    });
+
     const classInfo = {
       thisClass: className,
       superClass: superClass,
       interfaces: interfaces,
       accessFlags: 0x0001, // public
       fields: members.fields || [],
-      methods: members.methods || [],
+      methods: methodsObj,
       constantPool: {
         getSize: () => 0,
         resolve: () => { throw new Error("System class constant pool not implemented"); }
@@ -261,6 +379,10 @@ export class SystemClassPath implements ClassPath {
         return this.fields.find((f: any) => f.name === name && f.descriptor === descriptor) || null;
       }
     } as unknown as ClassInfo;
+
+    methodsObj.forEach((m: any) => {
+      m.classInfo = classInfo;
+    });
 
     this.systemClasses.set(className, classInfo);
   }

@@ -730,6 +730,11 @@ app.get('/api/launch', (req, res) => {
     return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
   }
 
+  if (modeParam === 'enginemode5-j2me-for-web') {
+    const runUrl = `/emu/web5/run.html?jar=/emu/jar/${token}.jar&canvasSize=${canvasSize}`;
+    return res.json({ success: true, url: runUrl, resolution: r, engine: 'freej2me-web' });
+  }
+
   // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
   const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
   

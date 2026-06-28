@@ -1,0 +1,11 @@
+export type JavaByte = number;
+export type JavaShort = number;
+export type JavaInt = number;
+export type JavaLong = bigint;
+export type JavaFloat = number;
+export type JavaDouble = number;
+export type JavaChar = number;
+export type JavaBoolean = boolean;
+export type JavaReference = object | null;
+export type TypedArray = Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array;
+export type JavaValue = JavaByte | JavaShort | JavaInt | JavaLong | JavaFloat | JavaDouble | JavaChar | JavaBoolean | JavaReference;
