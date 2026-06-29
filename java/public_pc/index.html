@@ -905,9 +905,23 @@
 
         function sendKeyRaw(code, isPress) {
             try {
+                console.log('[KEY-DEBUG] sendKeyRaw code=' + code + ' isPress=' + isPress + ' currentEngine=' + currentEngineKind);
                 const win = currentFrame && currentFrame.contentWindow;
-                if (!win || !gameReady) return;
-                if (currentEngineKind === 'freej2me' || currentEngineKind === 'cheerpj') {
+                if (!win || !gameReady) {
+                  console.log('[KEY-DEBUG] ⚠️ Bỏ qua phím do iframe chưa sẵn sàng (gameReady=' + gameReady + ')');
+                  return;
+                }
+                if (currentEngineKind === 'cheerpj') {
+                  const mapped = legacyCodeToFreeJ2MEKey(code);
+                  const vkMap = { Enter:10, ArrowUp:38, ArrowDown:40, ArrowLeft:37, ArrowRight:39, KeyQ:81, KeyW:87, KeyE:69, KeyR:82, Digit0:48, Digit1:49, Digit2:50, Digit3:51, Digit4:52, Digit5:53, Digit6:54, Digit7:55, Digit8:56, Digit9:57 };
+                  const keyName = mapped ? mapped.key : String(code);
+                  const codeName = mapped ? mapped.code : '';
+                  const vkCode = vkMap[codeName] || (keyName.length === 1 ? keyName.toUpperCase().charCodeAt(0) : parseInt(code, 10) || 0);
+                  console.log('[KEY-DEBUG][CheerpJ] Gửi postMessage phím tới iframe: key=' + keyName + ', vk=' + vkCode);
+                  win.postMessage({ type: 'cheerpj-key-command', key: keyName, keyCode: vkCode, isDown: isPress }, '*');
+                  return;
+                }
+                if (currentEngineKind === 'freej2me') {
                     const mapped = legacyCodeToFreeJ2MEKey(code);
                     if (mapped) dispatchKeyToFreeJ2MEWeb(mapped.key, mapped.code, isPress);
                     return;
@@ -915,7 +929,9 @@
                 if (!win.MIDP) return;
                 if (isPress && win.MIDP.sendKeyPress) win.MIDP.sendKeyPress(code);
                 else if (!isPress && win.MIDP.sendKeyRelease) win.MIDP.sendKeyRelease(code);
-            } catch (e) {}
+            } catch (e) {
+              console.log('[KEY-DEBUG] Lỗi gửi phím:', e);
+            }
         }
         function bindGamepadButtons() {
             document.querySelectorAll('[data-code]').forEach(btn => {

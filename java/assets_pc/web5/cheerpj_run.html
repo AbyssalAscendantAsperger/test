@@ -2,16 +2,18 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
-    <title>J2ME CheerpJ Mode 5 v9</title>
+    <title>J2ME CheerpJ Mode 5 v12</title>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; display: flex; justify-content: center; align-items: center; user-select: none; -webkit-user-select: none; }
-        #contenedor-juego { position: relative; overflow: hidden; image-rendering: pixelated; outline: none; }
+        #contenedor-juego { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; outline: none; }
+        /* —— FULLSCREEN DYNAMIC SCALING CSS —— */
+        canvas { width: 100% !important; height: 100% !important; max-width: 100vw; max-height: 100vh; object-fit: contain !important; image-rendering: pixelated; outline: none; }
     </style>
     <script>
         function relayLog(level, args) {
           try {
             const msg = args.map(a => (typeof a === 'object' ? (a.stack || JSON.stringify(a)) : String(a))).join(' ');
-            fetch('/api/browser-log', { method: 'POST', body: '[V9-' + level + '] ' + msg, headers: { 'Content-Type': 'text/plain' } }).catch(()=>{});
+            fetch('/api/browser-log', { method: 'POST', body: '[V12-' + level + '] ' + msg, headers: { 'Content-Type': 'text/plain' } }).catch(()=>{});
           } catch(e){}
         }
         const oLog = console.log; console.log = function(...a) { oLog.apply(console, a); relayLog('INFO', a); };
@@ -19,6 +21,27 @@
         const oWarn = console.warn; console.warn = function(...a) { oWarn.apply(console, a); relayLog('WARN', a); };
         window.onerror = function(m, u, l, c, e) { relayLog('FATAL', [m, 'at', l + ':' + c, e ? e.stack : '']); };
         window.onunhandledrejection = function(e) { relayLog('UNHANDLED', [e.reason ? (e.reason.stack || e.reason) : e]); };
+
+        // —— CHEERPJ KEYBOARD INPUT BRIDGE V12 ——
+        window.addEventListener('message', function(ev) {
+          if (ev.data && ev.data.type === 'cheerpj-key-command') {
+            const { key, keyCode, isDown } = ev.data;
+            console.log('[CheerpJ-KeyInputBridge-V12] Nhận lệnh phím:', key, 'VK=' + keyCode, isDown ? 'DOWN' : 'UP');
+            const eventType = isDown ? 'keydown' : 'keyup';
+            const evt = new KeyboardEvent(eventType, {
+              key: key,
+              code: key.length === 1 ? ('Key' + key.toUpperCase()) : key,
+              bubbles: true,
+              cancelable: true
+            });
+            for (const prop of ['keyCode', 'which', 'charCode']) {
+              try { Object.defineProperty(evt, prop, { get: () => keyCode }); } catch(e){}
+            }
+            window.dispatchEvent(evt);
+            const canvas = document.querySelector('canvas');
+            if (canvas) try { canvas.dispatchEvent(evt); } catch(e){}
+          }
+        });
     </script>
     <script src="./cheerpj/4.3/loader.js"></script>
 </head>
@@ -26,22 +49,18 @@
     <div id="contenedor-juego" tabindex="0"></div>
     <script>
         (async function () {
-            console.log('🌐 Booting CheerpJ Mode 5 (V9 Definitive)...');
+            console.log('🌐 Booting CheerpJ Mode 5 (V12 Input & Fullscreen)...');
             const params = new URLSearchParams(window.location.search);
             const token = params.get('token');
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
-            const displayH = (w === 240 && h === 320) ? 369 : h;
-
-            const container = document.getElementById("contenedor-juego");
-            container.style.width = w + 'px';
-            container.style.height = displayH + 'px';
 
             console.log('⏳ Initializing CheerpJ VM...');
             await cheerpjInit();
             console.log('✅ CheerpJ VM initialized.');
 
-            cheerpjCreateDisplay(w, displayH, container);
+            const container = document.getElementById("contenedor-juego");
+            cheerpjCreateDisplay(w, h, container);
             console.log('🖥️ Display canvas attached.');
 
             const appJarUrl = "/app/emu/jar/" + encodeURIComponent(token) + ".jar";

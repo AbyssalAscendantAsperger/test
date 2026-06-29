@@ -211,6 +211,7 @@ window.setupKeyboardMapping = function(iframe){
   }
   var fr = iframe || document.getElementById('emulatorFrame');
   if (fr) {
+    if (fr.src && fr.src.includes('cheerpj_run.html')) { console.log('[Keymap v7] CheerpJ Mode 5 detected – allowing direct keyboard hook for Java AWT'); return; }
     // remove sandbox if present (can break CheerpJ)
     try { fr.removeAttribute('sandbox'); } catch(e){}
     fr.addEventListener('load', function(){ setTimeout(function(){inject(fr,0)}, 180); });

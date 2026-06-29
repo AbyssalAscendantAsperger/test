@@ -68,7 +68,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ==================== V9 TỰ ĐỘNG DỌN DẸP TỆP RỖNG 0-BYTE TỪ BẢN CŨ ====================
+// ==================== V12 TỰ ĐỘNG DỌN DẸP TỆP RỖNG 0-BYTE TỪ BẢN CŨ ====================
 try {
   const badFiles = [
     path.join(ASSETS_DIR, 'web5', 'cheerpj', '4.3', '8', 'lib', 'tzdb.dat'),
@@ -80,97 +80,61 @@ try {
   badFiles.forEach(f => {
     if (fs.existsSync(f) && fs.statSync(f).size === 0) {
       fs.unlinkSync(f);
-      console.log('[V9-MOBILE][CLEANUP] Đã xóa tệp rỗng 0-byte gây lỗi EOFException:', f);
+      console.log('[V12-MOBILE][CLEANUP] Đã xóa tệp rỗng 0-byte gây lỗi EOFException:', f);
     }
   });
 } catch(e){}
 
 // Endpoint cầu nối nhận log trình duyệt gửi về Terminal
 app.post('/api/browser-log', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
-  console.log('[V9-BROWSER-VM] ' + String(req.body || '').slice(0, 3000));
+  console.log('[V12-BROWSER-VM] ' + String(req.body || '').slice(0, 3000));
   res.json({ ok: true });
 });
 
-// Middleware phục vụ Portal
+// Middleware Portal
 const PUBLIC_DIR = path.join(__dirname, 'public_mobile');
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
-} else {
-  app.use(express.static(path.join(__dirname, 'public')));
-}
+if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR)); else app.use(express.static(path.join(__dirname, 'public')));
 
 // Fallback web runtime
 app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
 
-// ==================== V9 MIDDLEWARE KIỂM SOÁT TỆP TĨNH /web5 ====================
+// V12 MIDDLEWARE KIỂM SOÁT TỆP TĨNH /web5
 app.use('/web5', (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
-    res.on('finish', () => {
-      console.log('[V9-MOBILE][STATIC] ' + req.method + ' /web5' + req.url + ' -> ' + res.statusCode);
-    });
+    res.on('finish', () => console.log('[V12-MOBILE][STATIC] ' + req.method + ' /web5' + req.url + ' -> ' + res.statusCode));
     try {
       const cleanPath = decodeURIComponent(req.path.split('?')[0]);
       const fullP = path.join(ASSETS_DIR, 'web5', cleanPath);
-      if (!fs.existsSync(fullP)) {
-        return res.status(404).send('');
-      }
+      if (!fs.existsSync(fullP)) return res.status(404).send('');
       const stat = fs.statSync(fullP);
-      if (stat.isDirectory()) {
-        return res.status(200).send('');
-      }
-      if (stat.size === 0 && req.headers.range) {
-        delete req.headers.range;
-      }
+      if (stat.isDirectory()) return res.status(200).send('');
+      if (stat.size === 0 && req.headers.range) delete req.headers.range;
     } catch (e) {}
   }
   next();
 });
 app.use('/web5', express.static(path.join(ASSETS_DIR, 'web5'), { acceptRanges: true }));
-
-// Legacy runtime classes
 app.use('/emu/java', express.static(path.join(SHARED_ROOT, 'java'), { acceptRanges: true }));
 
-// ==================== V9 ENDPOINT PHỤC VỤ ROM JAR & JAD ====================
+// V12 ENDPOINT PHỤC VỤ ROM JAR & JAD
 app.get('/emu/jar/:token', (req, res) => {
-  res.on('finish', () => {
-    console.log('[V9-MOBILE][JAR] ' + req.method + ' ' + req.originalUrl + ' (Range: ' + (req.headers.range || 'none') + ') -> ' + res.statusCode);
-  });
-  const rawToken = req.params.token;
-  let token = rawToken;
-  const isJad = rawToken.endsWith('.jad');
-  if (token.endsWith('.jar') || token.endsWith('.jad')) {
-    token = token.slice(0, -4);
-  }
+  res.on('finish', () => console.log('[V12-MOBILE][JAR] ' + req.method + ' ' + req.originalUrl + ' -> ' + res.statusCode));
+  const rawToken = req.params.token; let token = rawToken; const isJad = rawToken.endsWith('.jad');
+  if (token.endsWith('.jar') || token.endsWith('.jad')) token = token.slice(0, -4);
   const info = verifyToken(token);
-  if (!info) {
-    console.log('[V9-MOBILE][JAR] ❌ Token hết hạn hoặc không hợp lệ: ' + token);
-    return res.status(403).send('Forbidden');
-  }
+  if (!info) return res.status(403).send('Forbidden');
   const game = gameRegistry.get(info.gameId);
-  if (!game || !fs.existsSync(game.fullPath)) {
-    console.log('[V9-MOBILE][JAR] ❌ Không tìm thấy file ROM game: ' + info.gameId);
-    return res.status(404).send('Not found');
-  }
+  if (!game || !fs.existsSync(game.fullPath)) return res.status(404).send('Not found');
   if (isJad) {
     const jadPath = game.fullPath.slice(0, -4) + '.jad';
-    if (fs.existsSync(jadPath)) {
-      res.setHeader('Content-Type', 'text/vnd.sun.j2me.app-descriptor');
-      return res.sendFile(jadPath);
-    }
-    console.log('[V9-MOBILE][JAR] ℹ️ Game không có tệp .jad đi kèm, trả về 404 rỗng chuẩn');
+    if (fs.existsSync(jadPath)) { res.setHeader('Content-Type', 'text/vnd.sun.j2me.app-descriptor'); return res.sendFile(jadPath); }
     return res.status(404).send('');
   }
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Content-Type', 'application/java-archive');
+  res.setHeader('Pragma', 'no-cache'); res.setHeader('Expires', '0'); res.setHeader('Content-Type', 'application/java-archive');
   res.sendFile(game.fullPath);
 });
-
-// Thăm dò thư mục /emu/jar trả về 200 OK rỗng
 app.use('/emu/jar', (req, res) => res.status(200).send(''));
-
-// Phục vụ emulator
 app.use('/emu', express.static(JAVA_DIR));
 
 // ==================== TRÍCH XUẤT ICON TỪ JAR ====================
@@ -963,6 +927,12 @@ app.get('/', (req, res) => {
 // V9 Middleware xử lý lỗi toàn cục
 app.use((err, req, res, next) => {
   console.log('[V9-MOBILE][ERR] ' + (err.status || 500) + ': ' + (err.message || err));
+  if (err && (err.status === 416 || err.statusCode === 416)) return res.status(200).send('');
+  res.status(err.status || 500).send('');
+});
+
+app.use((err, req, res, next) => {
+  console.log('[V12-MOBILE][GLOBAL-ERR] ' + (err.status || 500) + ': ' + (err.message || err));
   if (err && (err.status === 416 || err.statusCode === 416)) return res.status(200).send('');
   res.status(err.status || 500).send('');
 });
