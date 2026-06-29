@@ -31,6 +31,78 @@ const SAVES_DIR = path.join(SHARED_ROOT, 'saves');      // DÙNG CHUNG (save the
 fs.mkdirSync(SAVES_DIR, { recursive: true });
 const FALLBACK_APPS_DIR = path.join(ASSETS_DIR, 'web', 'apps'); // RIÊNG (cache bundle của mobile)
 fs.mkdirSync(FALLBACK_APPS_DIR, { recursive: true });
+// ==================== MODE 5 CONFIG OVERRIDE (java/config/config.json) ====================
+const MODE5_CONFIG_PATH = path.join(SHARED_ROOT, 'config', 'config.json');
+const MODE5_ALLOWED_SETTING_KEYS = new Set([
+  'scrwidth','scrheight','sound','phone','backlightcolor','rotate','fps','soundfont','textfont','fontoffset',
+  'spdhacknoalpha','compatnonfatalnullimage','compattranstooriginonreset','compatimmediaterepaints','fpshack'
+]);
+const MODE5_ALLOWED_SYS_KEYS = new Set([
+  'fpsCounterPosition','logLevel','M3GWireframe','M3GUntextured','deleteTempKJXFiles','dumpAudioStreams','dumpGraphicsObjects',
+  'input_LeftSoft','input_RightSoft','input_ArrowUp','input_ArrowLeft','input_Fire','input_ArrowRight','input_ArrowDown',
+  'input_Num7','input_Num8','input_Num9','input_Num4','input_Num5','input_Num6','input_Num1','input_Num2','input_Num3',
+  'input_Star','input_Num0','input_Pound','input_FastForward','input_Screenshot','input_PauseResume'
+]);
+function readMode5ConfigFile() {
+  try {
+    if (!fs.existsSync(MODE5_CONFIG_PATH)) return null;
+    const raw = fs.readFileSync(MODE5_CONFIG_PATH, 'utf8').replace(/^\uFEFF/, '');
+    if (!raw.trim()) return null;
+    const cfg = JSON.parse(raw);
+    if (cfg && cfg.enabled === false) return null;
+    return cfg || null;
+  } catch (e) {
+    console.log('[MODE5-CONFIG][MOBILE] ⚠️ Không đọc được config/config.json:', e.message);
+    return null;
+  }
+}
+function mode5ShallowMergeConfig(a, b) {
+  const out = {
+    runtime: Object.assign({}, a && a.runtime || {}, b && b.runtime || {}),
+    settings: Object.assign({}, a && a.settings || {}, b && b.settings || {}),
+    sysSettings: Object.assign({}, a && a.sysSettings || {}, b && b.sysSettings || {})
+  };
+  return out;
+}
+function mode5GameMatches(rule, id, game, r) {
+  if (!rule || rule.enabled === false) return false;
+  const m = rule.match || rule;
+  if (m.id && String(m.id) !== String(id)) return false;
+  if (m.name && String(m.name).toLowerCase() !== String(game.name || '').toLowerCase()) return false;
+  if (m.nameContains && !String(game.name || '').toLowerCase().includes(String(m.nameContains).toLowerCase())) return false;
+  if (m.resolution && String(m.resolution) !== (r.width + 'x' + r.height)) return false;
+  if (m.width && Number(m.width) !== Number(r.width)) return false;
+  if (m.height && Number(m.height) !== Number(r.height)) return false;
+  return true;
+}
+function getMode5OverrideForGame(id, game, r) {
+  const cfg = readMode5ConfigFile();
+  if (!cfg) return { runtime: {}, settings: {}, sysSettings: {} };
+  let out = mode5ShallowMergeConfig({}, cfg.defaults || {});
+  const games = Array.isArray(cfg.games) ? cfg.games : Object.keys(cfg.games || {}).map(k => Object.assign({ match: { id: k } }, cfg.games[k] || {}));
+  for (const rule of games) {
+    if (mode5GameMatches(rule, id, game, r)) out = mode5ShallowMergeConfig(out, rule);
+  }
+  // aliases: runtime width/height also set FreeJ2ME scrwidth/scrheight unless explicitly set
+  if (out.runtime.width != null && out.settings.scrwidth == null) out.settings.scrwidth = String(out.runtime.width);
+  if (out.runtime.height != null && out.settings.scrheight == null) out.settings.scrheight = String(out.runtime.height);
+  return out;
+}
+function buildMode5CoreArg(ovr) {
+  const parts = [];
+  const add = (prefix, obj, allow) => {
+    for (const [k, v] of Object.entries(obj || {})) {
+      if (v === undefined || v === null || typeof v === 'object') continue;
+      if (allow && !allow.has(k)) { console.log('[MODE5-CONFIG][MOBILE] bỏ qua key không hỗ trợ:', prefix + k); continue; }
+      const val = String(v).replace(/[;\r\n]/g, ' ').replace(/=/g, ':').trim();
+      parts.push(prefix + k + '=' + val);
+    }
+  };
+  add('settings.', ovr.settings, MODE5_ALLOWED_SETTING_KEYS);
+  add('sysSettings.', ovr.sysSettings, MODE5_ALLOWED_SYS_KEYS);
+  return parts.join(';');
+}
+
 
 // === SESSION: mỗi trình duyệt/user 1 sid (cookie) -> 1 file save riêng ===
 function parseCookies(req) {
@@ -102,6 +174,16 @@ if (fs.existsSync(PUBLIC_DIR)) {
 // Fallback web runtime
 app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
 
+// Mode 5 mobile can use its own assets_mobile/web5, but the CheerpJ JRE is large.
+// If a file is missing there, fall back to shared java/web5, then PC web5.
+// This avoids JNI failures such as missing /web5/cheerpj/4.3/8/jre/lib/rt.jar.
+const WEB5_STATIC_DIRS = [
+  path.join(ASSETS_DIR, 'web5'),
+  path.join(SHARED_ROOT, 'web5'),
+  path.join(SHARED_ROOT, 'assets_pc', 'web5')
+].filter((p, i, a) => fs.existsSync(p) && a.indexOf(p) === i);
+console.log('[V9-MOBILE][WEB5] Static dirs: ' + WEB5_STATIC_DIRS.join(' | '));
+
 // ==================== V9 MIDDLEWARE KIỂM SOÁT TỆP TĨNH /web5 ====================
 app.use('/web5', (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -110,8 +192,12 @@ app.use('/web5', (req, res, next) => {
     });
     try {
       const cleanPath = decodeURIComponent(req.path.split('?')[0]);
-      const fullP = path.join(ASSETS_DIR, 'web5', cleanPath);
-      if (!fs.existsSync(fullP)) {
+      let fullP = null;
+      for (const base of WEB5_STATIC_DIRS) {
+        const p = path.join(base, cleanPath);
+        if (fs.existsSync(p)) { fullP = p; break; }
+      }
+      if (!fullP) {
         return res.status(404).send('');
       }
       const stat = fs.statSync(fullP);
@@ -125,7 +211,9 @@ app.use('/web5', (req, res, next) => {
   }
   next();
 });
-app.use('/web5', express.static(path.join(ASSETS_DIR, 'web5'), { acceptRanges: true }));
+for (const dir of WEB5_STATIC_DIRS) {
+  app.use('/web5', express.static(dir, { acceptRanges: true }));
+}
 
 // Legacy runtime classes
 app.use('/emu/java', express.static(path.join(SHARED_ROOT, 'java'), { acceptRanges: true }));
@@ -861,6 +949,26 @@ app.get('/api/launch', (req, res) => {
   // Trình giả lập cần chính xác định dạng enginemodeX-classesY.jar
   let modeParam = enginemode; 
   if (!modeParam) modeParam = 'enginemode2-classes2.jar';
+
+  if (modeParam === 'enginemode5-cheerpj-vm') {
+    console.log('[V9-MOBILE][LAUNCH] 🚀 Khởi chạy gameId=' + id + ' ở Mode 5 (CheerpJ VM mobile)');
+    console.log('[V9-MOBILE][LAUNCH] 🎟️ Sinh token=' + token);
+    const mode5Override = getMode5OverrideForGame(id, game, r);
+    const effectiveWidth = Number(mode5Override.settings.scrwidth || mode5Override.runtime.width || r.width);
+    const effectiveHeight = Number(mode5Override.settings.scrheight || mode5Override.runtime.height || r.height);
+    // Mobile Mode 5 must always force the actual game resolution and portrait/landscape
+    // choice from launch URL, otherwise a stale FreeJ2ME game.conf inside CheerpJ FS
+    // can keep rotate=on and make a 240x320 game appear sideways.
+    mode5Override.settings = mode5Override.settings || {};
+    mode5Override.settings.scrwidth = String(effectiveWidth);
+    mode5Override.settings.scrheight = String(effectiveHeight);
+    if (mode5Override.settings.rotate == null) mode5Override.settings.rotate = 'off';
+    const mode5CoreArg = buildMode5CoreArg(mode5Override);
+    console.log('[MODE5-CONFIG][MOBILE] gameId=' + id + ' base=' + r.width + 'x' + r.height + ' effective=' + effectiveWidth + 'x' + effectiveHeight + (mode5CoreArg ? ' arg=' + mode5CoreArg : ' arg=<none>'));
+    const cfgParam = mode5CoreArg ? '&cfg=' + encodeURIComponent(mode5CoreArg) : '';
+    const cheerpUrl = '/web5/cheerpj_run.html?token=' + encodeURIComponent(token) + '&width=' + effectiveWidth + '&height=' + effectiveHeight + cfgParam + '&mobile=1&virtualkeys=1';
+    return res.json({ success: true, url: cheerpUrl, resolution: { width: effectiveWidth, height: effectiveHeight }, engine: 'cheerpj', mode5Override: !!mode5CoreArg, input: 'virtual' });
+  }
 
   if (modeParam === 'enginemode4-freej2me-web') {
     try {

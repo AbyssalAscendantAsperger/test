@@ -82,6 +82,7 @@
             const token = params.get('token');
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
+            const cfg = params.get('cfg') || '';
             const displayH = h;
 
             const container = document.getElementById("contenedor-juego");
@@ -99,7 +100,7 @@
             const appJarUrl = "/app/emu/jar/" + encodeURIComponent(token) + ".jar";
             console.log('🎯 ROM argument:', appJarUrl);
 
-            console.log('🚀 Executing FreeJ2ME Main Class with args:', appJarUrl, String(w), String(h), '1');
+            console.log('🚀 Executing FreeJ2ME Main Class with args:', appJarUrl, String(w), String(h), '1', cfg ? ('cfg=' + cfg) : 'cfg=<none>');
             try {
               await cheerpjRunMain(
                   "org.recompile.freej2me.FreeJ2ME",
@@ -107,7 +108,8 @@
                   appJarUrl,
                   String(w),
                   String(h),
-                  "1"
+                  "1",
+                  cfg
               );
               console.log('✨ cheerpjRunMain exited cleanly.');
             } catch (err) {

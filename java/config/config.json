@@ -1,0 +1,137 @@
+{
+  "enabled": true,
+  "description": "Mode 5 / CheerpJ override config. This file is read by java/pc.js only when launching enginemode5-cheerpj-vm. Copy keys from __supported into defaults or a games[] rule. The __supported section is documentation and is ignored by the launcher.",
+  "defaults": {
+    "runtime": {},
+    "settings": {},
+    "sysSettings": {}
+  },
+  "games": [
+    {
+      "enabled": false,
+      "name": "EXAMPLE ONLY - copy this object and set enabled=true",
+      "match": {
+        "id": "gameId-from-/api/jars",
+        "nameContains": "Pipyaki",
+        "resolution": "240x320"
+      },
+      "runtime": {
+        "width": 240,
+        "height": 320,
+        "scale": 1
+      },
+      "settings": {
+        "scrwidth": "240",
+        "scrheight": "320",
+        "sound": "on",
+        "phone": "Standard",
+        "backlightcolor": "Disabled",
+        "rotate": "off",
+        "fps": "0",
+        "soundfont": "Default",
+        "textfont": "Default",
+        "fontoffset": "0",
+        "spdhacknoalpha": "off",
+        "compatnonfatalnullimage": "off",
+        "compattranstooriginonreset": "off",
+        "compatimmediaterepaints": "off",
+        "fpshack": "Disabled"
+      },
+      "sysSettings": {
+        "fpsCounterPosition": "Off",
+        "logLevel": "2",
+        "M3GWireframe": "off",
+        "M3GUntextured": "off",
+        "deleteTempKJXFiles": "on",
+        "dumpAudioStreams": "off",
+        "dumpGraphicsObjects": "off",
+        "input_LeftSoft": "81",
+        "input_RightSoft": "87",
+        "input_ArrowUp": "38",
+        "input_ArrowLeft": "37",
+        "input_Fire": "10",
+        "input_ArrowRight": "39",
+        "input_ArrowDown": "40",
+        "input_Num7": "103",
+        "input_Num8": "104",
+        "input_Num9": "105",
+        "input_Num4": "100",
+        "input_Num5": "101",
+        "input_Num6": "102",
+        "input_Num1": "97",
+        "input_Num2": "98",
+        "input_Num3": "99",
+        "input_Star": "69",
+        "input_Num0": "96",
+        "input_Pound": "82",
+        "input_FastForward": "32",
+        "input_Screenshot": "67",
+        "input_PauseResume": "88"
+      }
+    }
+  ],
+  "__supported": {
+    "matching": {
+      "id": "Exact game id from /api/jars. Highest precision.",
+      "name": "Exact displayed game name.",
+      "nameContains": "Case-insensitive substring of displayed game name.",
+      "resolution": "Example: 240x320.",
+      "width": "Numeric width match.",
+      "height": "Numeric height match."
+    },
+    "runtime": {
+      "width": "CheerpJ display width and FreeJ2ME scrwidth. Number.",
+      "height": "CheerpJ display height and FreeJ2ME scrheight. Number.",
+      "scale": "Reserved for docs. Current launcher passes scale=1."
+    },
+    "settings": {
+      "scrwidth": ["96", "101", "120", "128", "130", "132", "176", "180", "208", "220", "240", "320", "352", "360", "400", "480", "640", "800"],
+      "scrheight": ["64", "65", "80", "128", "130", "160", "176", "180", "208", "220", "240", "320", "360", "400", "416", "432", "480", "640", "800"],
+      "sound": ["on", "off"],
+      "phone": ["Standard", "LG", "Motorola", "MotoTriplets", "MotoV8", "NokiaKeyboard", "Sagem", "Siemens", "SiemensOld"],
+      "backlightcolor": ["Disabled", "Green", "Cyan", "Orange", "Violet", "Red"],
+      "rotate": ["on", "off"],
+      "fps": ["0", "15", "20", "25", "30", "50", "60"],
+      "soundfont": ["Default", "Custom"],
+      "textfont": ["Default", "Custom"],
+      "fontoffset": ["-8", "-4", "-2", "0", "2", "4", "8"],
+      "spdhacknoalpha": ["on", "off"],
+      "compatnonfatalnullimage": ["on", "off"],
+      "compattranstooriginonreset": ["on", "off"],
+      "compatimmediaterepaints": ["on", "off"],
+      "fpshack": ["Disabled", "Safe", "Extended", "Aggressive"]
+    },
+    "sysSettings": {
+      "fpsCounterPosition": ["Off", "TopLeft", "TopRight", "BottomLeft", "BottomRight"],
+      "logLevel": ["0", "1", "2", "3", "4"],
+      "M3GWireframe": ["on", "off"],
+      "M3GUntextured": ["on", "off"],
+      "deleteTempKJXFiles": ["on", "off"],
+      "dumpAudioStreams": ["on", "off"],
+      "dumpGraphicsObjects": ["on", "off"],
+      "input_LeftSoft": "AWT KeyEvent code. Default Q=81.",
+      "input_RightSoft": "AWT KeyEvent code. Default W=87.",
+      "input_ArrowUp": "Default ArrowUp=38.",
+      "input_ArrowLeft": "Default ArrowLeft=37.",
+      "input_Fire": "Default Enter=10.",
+      "input_ArrowRight": "Default ArrowRight=39.",
+      "input_ArrowDown": "Default ArrowDown=40.",
+      "input_Num7": "Default Numpad7=103.",
+      "input_Num8": "Default Numpad8=104.",
+      "input_Num9": "Default Numpad9=105.",
+      "input_Num4": "Default Numpad4=100.",
+      "input_Num5": "Default Numpad5=101.",
+      "input_Num6": "Default Numpad6=102.",
+      "input_Num1": "Default Numpad1=97.",
+      "input_Num2": "Default Numpad2=98.",
+      "input_Num3": "Default Numpad3=99.",
+      "input_Star": "Default E=69.",
+      "input_Num0": "Default Numpad0=96.",
+      "input_Pound": "Default R=82.",
+      "input_FastForward": "Default Space=32.",
+      "input_Screenshot": "Default C=67.",
+      "input_PauseResume": "Default X=88."
+    },
+    "knownResolutions": ["96x65", "101x64", "101x80", "128x128", "130x130", "120x160", "128x160", "132x176", "176x208", "176x220", "220x176", "208x208", "180x320", "320x180", "208x320", "240x320", "320x240", "240x400", "400x240", "240x432", "240x480", "360x360", "352x416", "360x640", "640x360", "640x480", "480x800", "800x480"]
+  }
+}
