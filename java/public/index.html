@@ -781,7 +781,7 @@
                 const r = await fetch('/api/launch?id=' + encodeURIComponent(gameId) + '&enginemode=' + encodeURIComponent(engineMode));
                 const data = await r.json();
                 if (data.success) {
-                    currentEngineKind = data.engine === 'freej2me-web' ? 'freej2me' : 'legacy';
+                    currentEngineKind = data.engine === 'cheerpj' ? 'cheerpj' : (data.engine === 'freej2me-web' ? 'freej2me' : 'legacy');
                     currentFallbackAppId = data.appId || null;
                     currentFrame.src = data.url;
                     currentFrame.onload = () => {
@@ -901,22 +901,30 @@
             return map[String(n)] || null;
         }
 
+        function nodeKeyLog(msg) {
+            try { fetch('/api/browser-log', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '[KEY-DEBUG][PARENT] ' + msg }).catch(()=>{}); } catch(e) {}
+        }
+
         function sendKeyRaw(code, isPress) {
             try {
-                console.log('[KEY-DEBUG] sendKeyRaw code=' + code + ' isPress=' + isPress + ' currentEngine=' + currentEngineKind);
+                console.log('[KEY-DEBUG] sendKeyRaw code=' + code + ' isPress=' + isPress + ' currentEngine=' + currentEngineKind); nodeKeyLog('sendKeyRaw code=' + code + ' isPress=' + isPress + ' currentEngine=' + currentEngineKind + ' gameReady=' + gameReady);
                 const win = currentFrame && currentFrame.contentWindow;
                 if (!win || !gameReady) {
                   console.log('[KEY-DEBUG] ⚠️ Bỏ qua phím do iframe chưa sẵn sàng (gameReady=' + gameReady + ')');
                   return;
                 }
                 if (currentEngineKind === 'cheerpj') {
-                  const mapped = legacyCodeToFreeJ2MEKey(code);
+                  let mapped = legacyCodeToFreeJ2MEKey(code);
+                  // Mode 5 core now understands top-row digits; map virtual C/D to 7/9
+                  // because FreeJ2ME Canvas maps 7 -> GAME_C and 9 -> GAME_D.
+                  if (Number(code) === 122) mapped = { key: '7', code: 'Digit7' };
+                  if (Number(code) === 99) mapped = { key: '9', code: 'Digit9' };
                   const vkMap = { Enter:10, ArrowUp:38, ArrowDown:40, ArrowLeft:37, ArrowRight:39, KeyQ:81, KeyW:87, KeyE:69, KeyR:82, Digit0:48, Digit1:49, Digit2:50, Digit3:51, Digit4:52, Digit5:53, Digit6:54, Digit7:55, Digit8:56, Digit9:57 };
                   const keyName = mapped ? mapped.key : String(code);
                   const codeName = mapped ? mapped.code : '';
                   const vkCode = vkMap[codeName] || (keyName.length === 1 ? keyName.toUpperCase().charCodeAt(0) : parseInt(code, 10) || 0);
-                  console.log('[KEY-DEBUG][CheerpJ] Gửi postMessage phím tới iframe: key=' + keyName + ', vk=' + vkCode);
-                  win.postMessage({ type: 'cheerpj-key-command', key: keyName, keyCode: vkCode, isDown: isPress }, '*');
+                  console.log('[KEY-DEBUG][CheerpJ] Gửi postMessage phím tới iframe: key=' + keyName + ', code=' + codeName + ', vk=' + vkCode); nodeKeyLog('CheerpJ postMessage midp=' + code + ' key=' + keyName + ' code=' + codeName + ' vk=' + vkCode + ' down=' + isPress);
+                  win.postMessage({ type: 'cheerpj-key-command', key: keyName, code: codeName, keyCode: vkCode, isDown: isPress, midpCode: Number(code) }, '*');
                   return;
                 }
                 if (currentEngineKind === 'freej2me') {
@@ -934,8 +942,8 @@
         function bindGamepadButtons() {
             document.querySelectorAll('[data-code]').forEach(btn => {
                 const code = parseInt(btn.dataset.code, 10);
-                const press = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.add('pressed'); sendKeyRaw(code, true); };
-                const release = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.remove('pressed'); sendKeyRaw(code, false); };
+                const press = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.add('pressed'); nodeKeyLog('virtual button DOWN data-code=' + code + ' label=' + (btn.textContent||'').trim()); sendKeyRaw(code, true); };
+                const release = function(e) { e.preventDefault(); e.stopPropagation(); btn.classList.remove('pressed'); nodeKeyLog('virtual button UP data-code=' + code + ' label=' + (btn.textContent||'').trim()); sendKeyRaw(code, false); };
                 btn.addEventListener('touchstart', press, { passive: false });
                 btn.addEventListener('touchend', release, { passive: false });
                 btn.addEventListener('touchcancel', release, { passive: false });
