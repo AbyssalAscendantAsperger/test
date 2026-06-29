@@ -76,6 +76,8 @@ const PUBLIC_DIR = path.join(__dirname, 'public_pc');
 app.use(express.static(PUBLIC_DIR));
 // Fallback web runtime (freej2me-web)
 app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
+// Mode 5 CheerpJ VM runtime
+app.use('/web5', express.static(path.join(ASSETS_DIR, 'web5'), { acceptRanges: true }));
 // Legacy runtime classes jars are shared from root java/java/*.jar, not inside assets_pc.
 app.use('/emu/java', express.static(path.join(SHARED_ROOT, 'java'), { acceptRanges: true }));
 
@@ -738,6 +740,11 @@ app.get('/api/launch', (req, res) => {
   // Trình giả lập cần chính xác định dạng enginemodeX-classesY.jar
   let modeParam = enginemode; 
   if (!modeParam) modeParam = 'enginemode2-classes2.jar';
+
+  if (modeParam === 'enginemode5-cheerpj-vm') {
+    const cheerpUrl = `/web5/cheerpj_run.html?token=${encodeURIComponent(token)}&width=${r.width}&height=${r.height}`;
+    return res.json({ success: true, url: cheerpUrl, resolution: r, engine: 'cheerpj' });
+  }
 
   if (modeParam === 'enginemode4-freej2me-web') {
     try {

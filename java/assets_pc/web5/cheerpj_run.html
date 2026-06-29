@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>J2ME CheerpJ Mode 5</title>
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #contenedor-juego {
+            position: relative;
+            overflow: hidden;
+            image-rendering: pixelated;
+            outline: none;
+        }
+    </style>
+    <script src="./cheerpj/4.3/loader.js"></script>
+</head>
+<body>
+    <div id="contenedor-juego" tabindex="0"></div>
+    <script>
+        (async function () {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token');
+            const w = parseInt(params.get('width') || '240', 10);
+            const h = parseInt(params.get('height') || '320', 10);
+
+            // FreeJ2ME SDL mode status/menu bar compensation
+            const displayH = (w === 240 && h === 320) ? 369 : h;
+
+            const container = document.getElementById("contenedor-juego");
+            container.style.width = w + 'px';
+            container.style.height = displayH + 'px';
+
+            await cheerpjInit();
+            cheerpjCreateDisplay(w, displayH, container);
+
+            const jarUrl = "/app/emu/jar/" + encodeURIComponent(token);
+            await cheerpjRunMain(
+                "org.recompile.freej2me.FreeJ2ME",
+                "/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar",
+                jarUrl
+            );
+        })();
+    </script>
+</body>
+</html>

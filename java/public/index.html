@@ -468,18 +468,18 @@
             const curDev = devSelect ? devSelect.value : '';
             const curProfile = profileSelect ? profileSelect.value : '';
             if (devSelect) {
-                devSelect.innerHTML = '<option value="">Dev: Tất cả</option>' + (data.devs || []).map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>').join('');
+                devSelect.innerHTML = '<option value="">Dev: Tất cả<\/option>' + (data.devs || []).map(d => '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '<\/option>').join('');
                 devSelect.value = curDev;
             }
             if (profileSelect) {
-                profileSelect.innerHTML = '<option value="">Profile: Tất cả</option>' + (data.profiles || []).map(p => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>').join('');
+                profileSelect.innerHTML = '<option value="">Profile: Tất cả<\/option>' + (data.profiles || []).map(p => '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '<\/option>').join('');
                 profileSelect.value = curProfile;
             }
         }
         function iconHtmlFor(game) {
             return game.hasIcon
-                ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮</div>\'">'
-                : '<div class="game-icon-placeholder">🎮</div>';
+                ? '<img class="game-icon" src="/api/icon/' + game.id + '" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮<\/div>\'">'
+                : '<div class="game-icon-placeholder">🎮<\/div>';
         }
         function getSearchQuery() {
             return (document.getElementById('searchBox')?.value || '').trim();
@@ -548,16 +548,16 @@
             }
             document.getElementById('status').innerHTML = statusHtml;
             container.innerHTML = '';
-            if (!groupedGames.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+            if (!groupedGames.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game<\/div>'; return; }
             const frag = document.createDocumentFragment();
             groupedGames.forEach(group => {
                 const game = group[0];
                 const card = document.createElement('div');
                 card.className = 'jar-card';
                 const r = game.resolution;
-                const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + (group.length > 1 ? '<span class="dup-badge">' + group.length + ' bản</span>' : '') + '</div>' : '';
-                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '</div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + (game.config ? ' • ' + escapeHtml(game.config) : '') + '</div>';
-                card.innerHTML = iconHtmlFor(game) + '<div class="game-info"><div class="jar-name">' + escapeHtml(game.name) + '</div>' + resBadge + meta + '<button class="play-btn">▶ Chơi</button></div>';
+                const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + (group.length > 1 ? '<span class="dup-badge">' + group.length + ' bản<\/span>' : '') + '<\/div>' : '';
+                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '<\/div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + (game.config ? ' • ' + escapeHtml(game.config) : '') + '<\/div>';
+                card.innerHTML = iconHtmlFor(game) + '<div class="game-info"><div class="jar-name">' + escapeHtml(game.name) + '<\/div>' + resBadge + meta + '<button class="play-btn">▶ Chơi<\/button><\/div>';
                 card.onclick = () => { if (group.length > 1) openVersionModal(group); else launchGame(game.id, game.name); };
                 frag.appendChild(card);
             });
@@ -572,7 +572,7 @@
             list.innerHTML = group.map(g => {
                 const r = g.resolution;
                 const meta = (r ? r.width + '×' + r.height : '?') + ' • Dev: ' + escapeHtml(g.dev || 'Unknown') + ' • ' + escapeHtml(g.profile || 'Unknown') + (g.config ? ' • ' + escapeHtml(g.config) : '') + (g.version ? ' • v' + escapeHtml(g.version) : '');
-                return '<div class="version-row" onclick="closeVersionModal(); launchGame(\'' + escapeHtml(g.id) + '\', \'' + escapeHtml(g.name).replace(/'/g, '&#39;') + '\')">' + iconHtmlFor(g) + '<div class="version-info"><div class="version-title">' + escapeHtml(g.name) + '</div><div class="version-meta">' + meta + '</div></div><button class="version-play">Chơi</button></div>';
+                return '<div class="version-row" onclick="closeVersionModal(); launchGame(\'' + escapeHtml(g.id) + '\', \'' + escapeHtml(g.name).replace(/'/g, '&#39;') + '\')">' + iconHtmlFor(g) + '<div class="version-info"><div class="version-title">' + escapeHtml(g.name) + '<\/div><div class="version-meta">' + meta + '<\/div><\/div><button class="version-play">Chơi<\/button><\/div>';
             }).join('');
             modal.classList.add('visible');
         }
@@ -634,7 +634,7 @@
                 const holder = document.createElement('button');
                 holder.type = 'button'; holder.dataset.action = action;
                 holder.style.cssText = 'text-align:left;padding:12px;border-radius:10px;border:1px solid #3a4660;background:#161d2c;color:#fff;cursor:pointer;';
-                holder.innerHTML = '<div style="font-size:13px;color:#9fe8ff;font-weight:700;margin-bottom:4px;">' + ACTION_LABELS[action] + '</div>' + '<div style="font-size:12px;color:#cfe0ff;">' + humanKeyName(Object.keys(draft).find(k => draft[k] === action) || '') + '</div>';
+                holder.innerHTML = '<div style="font-size:13px;color:#9fe8ff;font-weight:700;margin-bottom:4px;">' + ACTION_LABELS[action] + '<\/div>' + '<div style="font-size:12px;color:#cfe0ff;">' + humanKeyName(Object.keys(draft).find(k => draft[k] === action) || '') + '<\/div>';
                 if (keymapCaptureAction === action) holder.style.outline = '2px solid #7CFF7C';
                 holder.onclick = function() { startCaptureForAction(action); };
                 grid.appendChild(holder);
@@ -662,12 +662,12 @@
             try {
                 const res = await fetch('/api/jars');
                 const data = await res.json();
-                if (data.error || !data.games?.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; return; }
+                if (data.error || !data.games?.length) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Không tìm thấy game<\/div>'; return; }
                 allGames = data.games || [];
                 assignRandomRanks();
                 populateFilters(data);
                 renderGameList();
-            } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server</div>'; }
+            } catch (e) { container.innerHTML = '<div style="color:#ff6b6b;text-align:center">Lỗi server<\/div>'; }
         }
 
         function escapeHtml(s) {
@@ -682,14 +682,14 @@
             if (!box) return;
             if (!results || !results.length) {
                 box.classList.add('visible');
-                box.innerHTML = '<div style="color:#888;font-size:12px;padding:8px">Không có kết quả.</div>';
+                box.innerHTML = '<div style="color:#888;font-size:12px;padding:8px">Không có kết quả.<\/div>';
                 return;
             }
             box.classList.add('visible');
             box.innerHTML = results.map(g => '<div class="dedomil-item">' +
-                '<div class="dedomil-title">' + escapeHtml(g.title) + '<span class="dedomil-date">' + escapeHtml(g.date || '') + '</span></div>' +
-                '<button class="dedomil-download" onclick="downloadDedomilGame(\'' + encodeURIComponent(g.id) + '\', this)">Tải</button>' +
-                '</div>').join('');
+                '<div class="dedomil-title">' + escapeHtml(g.title) + '<span class="dedomil-date">' + escapeHtml(g.date || '') + '<\/span><\/div>' +
+                '<button class="dedomil-download" onclick="downloadDedomilGame(\'' + encodeURIComponent(g.id) + '\', this)">Tải<\/button>' +
+                '<\/div>').join('');
         }
         function updateDedomilPager() {
             const pager = document.getElementById('dedomilPager');
@@ -797,8 +797,8 @@
                         try { loadedFrame.focus(); } catch (e) {}
                     };
                     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) showGamepad();
-                } else if (data.error) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '</h3>'; }
-            } catch (e) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi</h3>'; }
+                } else if (data.error) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">' + data.error + '<\/h3>'; }
+            } catch (e) { currentFrame.srcdoc = '<h3 style="color:red;padding:30px">Lỗi<\/h3>'; }
         }
 
         function toggleFullscreen() {
