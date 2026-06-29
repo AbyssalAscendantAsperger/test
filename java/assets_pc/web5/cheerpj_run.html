@@ -99,12 +99,15 @@
             const appJarUrl = "/app/emu/jar/" + encodeURIComponent(token) + ".jar";
             console.log('🎯 ROM argument:', appJarUrl);
 
-            console.log('🚀 Executing FreeJ2ME Main Class...');
+            console.log('🚀 Executing FreeJ2ME Main Class with args:', appJarUrl, String(w), String(h), '1');
             try {
               await cheerpjRunMain(
                   "org.recompile.freej2me.FreeJ2ME",
                   "/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar",
-                  appJarUrl
+                  appJarUrl,
+                  String(w),
+                  String(h),
+                  "1"
               );
               console.log('✨ cheerpjRunMain exited cleanly.');
             } catch (err) {
