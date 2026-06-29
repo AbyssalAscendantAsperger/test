@@ -1164,7 +1164,16 @@
                 if (status) status.textContent = '💾...';
                 const text = await getSaveText(win);
                 if (!text || text === 'TIMEOUT' || text === '{}') { if (status) status.textContent = '⚠'; return; }
-                const r = await withTimeout(fetch('/api/save?gameId=' + encodeURIComponent(gameId), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text }), 1500);
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timeoutId = controller ? setTimeout(() => controller.abort(), 4000) : null;
+                const r = await withTimeout(fetch('/api/save?gameId=' + encodeURIComponent(gameId), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: text,
+                    keepalive: true,
+                    signal: controller ? controller.signal : undefined
+                }), 4500);
+                if (timeoutId) clearTimeout(timeoutId);
                 if (r === 'TIMEOUT') { if (status) status.textContent = '⚠'; return; }
                 await r.json();
                 if (finalWipe) { try { const db = await openFsDB(); await new Promise((res) => { const tx = db.transaction('fs4', 'readwrite'); tx.objectStore('fs4').clear(); tx.oncomplete = res; tx.onerror = res; }); db.close(); } catch(e) {} }

@@ -22,41 +22,33 @@
   <script src="libs/encoding.js"></script>
   <!-- Load config scripts separately because compiled-method-cache.js
      - depends on them. -->
-  <script type="text/javascript" src="config/default.js" defer></script>
-  <script type="text/javascript" src="config/runtests.js" defer></script>
-  <script type="text/javascript" src="config/build.js" defer></script>
-  <script type="text/javascript" src="config/urlparams.js" defer></script>
-
-
-  <!--<script type="text/javascript" src="libs/terminal.js" defer></script>-->
-
-  <!-- Load promise-6.0.0.js and IndexedDB-getAll-shim.js separately
-     - because compiled-method-cache.js depends on them. -->
-  <script type="text/javascript" src="libs/promise-6.0.0.js" defer></script>
-  <script type="text/javascript" src="polyfill/IndexedDB-getAll-shim.js" defer></script>
-
-  <!-- Load compiled-method-cache.js separately because j2me.js depends on it. -->
-  <script type="text/javascript" src="libs/compiled-method-cache.js" defer></script>
-
-  <!-- Load bld/native.js separately because adding it to main-all.js
-     - throws an "asm.js type error". -->
-  <script type="text/javascript" src="bld/native.js" defer></script>
-
-  <!-- Load j2me.js separately because classes.jar.js depends on it (it adds
-     - members to the AOTMD hash that j2me.js defines); and also so its source
-     - map gets loaded by the debugger. -->
-  <script type="text/javascript" src="bld/j2me.js" defer></script>
-
-  <!-- Run `make aot` to generate these.  Load them separately, because adding
-     - classes.jar.js to main-all.js fails silently for unknown reasons. -->
-  <!--<script type="text/javascript" src="bld/classes.jar.js" defer></script>-->
-  <!--<script type="text/javascript" src="bld/program.jar.js" defer></script>-->
-  <!--<script type="text/javascript" src="bld/tests.jar.js" defer></script>-->
-
-  <!-- Load the rest of the scripts from the combined script main-all.js
-     - to improve startup and runtime performance.  See Makefile for the list
-     - of files that get combined into this one. -->
-  <script type="text/javascript" src="bld/main-all.js" defer></script>
+  <!-- legacy runtime scripts are loaded by a debug bootstrap below so we can log exact load failures on ngrok/proxy environments -->
+  <script>
+    (function(){
+      function bootLog(msg){
+        try {
+          console.log('[legacy-boot] ' + msg);
+          fetch('/api/legacy-log', { method:'POST', headers:{'Content-Type':'text/plain'}, body:'[legacy-boot] ' + msg, keepalive:true }).catch(function(){});
+        } catch(e) {}
+      }
+      window.addEventListener('error', function(e){
+        bootLog('window.error message=' + (e && e.message || '') + ' file=' + (e && e.filename || '') + ' line=' + (e && e.lineno || 0));
+      });
+      window.addEventListener('unhandledrejection', function(e){
+        bootLog('unhandledrejection reason=' + String(e && e.reason));
+      });
+      var ordered = ['config/default.js','config/runtests.js','config/build.js','config/urlparams.js','libs/promise-6.0.0.js','polyfill/IndexedDB-getAll-shim.js','libs/compiled-method-cache.js','bld/native.js','bld/j2me.js','bld/main-all.js'];
+      (function loadSequential(i){
+        if (i >= ordered.length) return;
+        var src = ordered[i];
+        var s = document.createElement('script');
+        s.src = src + '?dbg=' + Date.now();
+        s.onload = function(){ bootLog('loaded ' + src); loadSequential(i + 1); };
+        s.onerror = function(){ bootLog('FAILED ' + src); };
+        document.head.appendChild(s);
+      })(0);
+    })();
+  </script>
   
   <script type="text/javascript" src="keymap.js"></script>
   <style>
@@ -157,6 +149,7 @@
         <div class="download-progress-container">
           <progress class="pack-activity" id="download-bar" value="0" max="100"></progress>
         </div>
+        <pre id="legacy-debug-log" style="display:none;white-space:pre-wrap;word-break:break-word;max-width:92vw;max-height:28vh;overflow:auto;margin:10px auto 0;padding:8px 10px;background:#111;color:#7CFF7C;border:1px solid #244;font:12px/1.4 monospace;text-align:left;">[legacy-debug] waiting…</pre>
       </div>
 
       <div id="splash-screen" class="screen">
@@ -229,6 +222,130 @@
     </div> 
  </div>
 
+  <script>
+    // Arena/ngrok compatibility bridge + deep diagnostics for legacy engine.
+    (function() {
+      var debugEl = null;
+      function getDebugEl() {
+        if (!debugEl) debugEl = document.getElementById('legacy-debug-log');
+        return debugEl;
+      }
+      function dbg(msg) {
+        try {
+          var line = '[legacy-debug ' + new Date().toISOString().slice(11, 19) + '] ' + msg;
+          console.log(line);
+          try { fetch('/api/legacy-log', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: line, keepalive: true }).catch(function(){}); } catch (e) {}
+          var el = getDebugEl();
+          if (el) {
+            if (el.textContent.indexOf('waiting…') >= 0) el.textContent = '';
+            el.textContent += line + '\n';
+            el.scrollTop = el.scrollHeight;
+          }
+        } catch (e) {}
+      }
+      function postToChild(pipeID, message) {
+        dbg('postToChild pipe=' + pipeID + ' type=' + (message && message.type ? message.type : 'message'));
+        try { window.postMessage({ pipeID: pipeID, message: message }, '*'); } catch (e) { dbg('postMessage error: ' + (e && e.message || e)); }
+      }
+      function toArrayBuffer(buf) {
+        if (buf instanceof ArrayBuffer) return buf;
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      }
+      function looksLikeNgrokWarning(text) {
+        text = String(text || '');
+        return /ERR_NGROK_6024|ngrok\.com|This website is served for free through ngrok/i.test(text);
+      }
+      function firstBytesHex(ab, limit) {
+        try {
+          var arr = new Uint8Array(ab || new ArrayBuffer(0));
+          var out = [];
+          for (var i = 0; i < Math.min(arr.length, limit || 24); i++) out.push(arr[i].toString(16).padStart(2, '0'));
+          return out.join(' ');
+        } catch (e) { return 'n/a'; }
+      }
+      function fetchJarWithProgress(url, pipeID) {
+        dbg('JARDownloader start url=' + url);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.responseType = 'arraybuffer';
+        xhr.setRequestHeader('ngrok-skip-browser-warning', '1');
+        xhr.onprogress = function(e) {
+          var percent = 0;
+          if (e.lengthComputable && e.total > 0) percent = Math.max(0, Math.min(100, Math.round((e.loaded * 100) / e.total)));
+          dbg('JAR progress loaded=' + e.loaded + ' total=' + (e.total || 0) + ' percent=' + percent);
+          postToChild(pipeID, { type: 'progress', progress: percent });
+        };
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState === 2) dbg('JAR headers status=' + xhr.status + ' content-type=' + (xhr.getResponseHeader('content-type') || '-') + ' content-length=' + (xhr.getResponseHeader('content-length') || '-'));
+        };
+        xhr.onload = function() {
+          var ctype = xhr.getResponseHeader('content-type') || '';
+          var ab = xhr.response;
+          var size = ab ? (ab.byteLength || 0) : 0;
+          dbg('JAR load status=' + xhr.status + ' ctype=' + ctype + ' size=' + size + ' bytes hex=' + firstBytesHex(ab));
+          if (xhr.status >= 200 && xhr.status < 300 && ab) {
+            try {
+              var text = new TextDecoder('utf-8').decode(new Uint8Array(ab).slice(0, 2048));
+              if (looksLikeNgrokWarning(text)) {
+                dbg('JAR load detected ngrok warning HTML instead of JAR');
+                postToChild(pipeID, { type: 'fail', status: xhr.status, statusText: 'ngrok warning page returned instead of JAR' });
+                return;
+              }
+            } catch (e) {}
+            postToChild(pipeID, { type: 'progress', progress: 100 });
+            postToChild(pipeID, { type: 'done', data: toArrayBuffer(ab) });
+          } else {
+            postToChild(pipeID, { type: 'fail', status: xhr.status, statusText: xhr.statusText || 'HTTP error' });
+          }
+        };
+        xhr.onerror = function() { dbg('JAR xhr.onerror status=' + (xhr.status || 0)); postToChild(pipeID, { type: 'fail', status: xhr.status || 0, statusText: 'network error' }); };
+        xhr.onabort = function() { dbg('JAR xhr.onabort'); postToChild(pipeID, { type: 'fail', status: 0, statusText: 'aborted' }); };
+        xhr.send(null);
+      }
+      window.DumbPipe = window.DumbPipe || {
+        _timers: new Map(),
+        handleEvent: function(event) {
+          var d = event && event.detail ? event.detail : null;
+          dbg('handleEvent ' + JSON.stringify(d && { command: d.command, type: d.type, pipeID: d.pipeID, message: d.message }));
+          if (!d || d.command !== 'open') return;
+          if (d.type === 'mobileInfo') {
+            dbg('respond mobileInfo pipe=' + d.pipeID);
+            postToChild(d.pipeID, { icc: { mcc: '001', mnc: '01' }, network: { mcc: '001', mnc: '01' } });
+            return;
+          }
+          if (d.type === 'JARDownloader') {
+            fetchJarWithProgress(String(d.message || ''), d.pipeID);
+            return;
+          }
+          dbg('unhandled DumbPipe type=' + d.type);
+        }
+      };
+      try {
+        var originalOpen = window.DumbPipe && window.DumbPipe.open;
+        if (typeof originalOpen === 'function') {
+          window.DumbPipe.open = function(type, message, recipient) {
+            dbg('DumbPipe.open type=' + type + ' message=' + String(message || ''));
+            return originalOpen.call(this, type, message, recipient);
+          };
+        }
+        var originalSend = window.DumbPipe && window.DumbPipe.send;
+        if (typeof originalSend === 'function') {
+          window.DumbPipe.send = function(envelope) {
+            dbg('DumbPipe.send ' + JSON.stringify(envelope && { command: envelope.command, type: envelope.type, pipeID: envelope.pipeID, message: envelope.message }));
+            if (envelope && envelope.command === 'open') {
+              setTimeout(function() {
+                try { window.DumbPipe.handleEvent({ detail: envelope }); } catch (e) { dbg('forced handleEvent error: ' + (e && e.message || e)); }
+              }, 0);
+            }
+            return originalSend.call(this, envelope);
+          };
+        }
+      } catch (e) { dbg('DumbPipe patch error: ' + (e && e.message || e)); }
+      window.__arenaLegacyDbg = dbg;
+      dbg('legacy bridge installed; location=' + location.href);
+      dbg('query=' + location.search);
+    })();
+  </script>
 </body>
 
 </html>

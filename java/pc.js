@@ -76,6 +76,8 @@ const PUBLIC_DIR = path.join(__dirname, 'public_pc');
 app.use(express.static(PUBLIC_DIR));
 // Fallback web runtime (freej2me-web)
 app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
+// Legacy runtime classes jars are shared from root java/java/*.jar, not inside assets_pc.
+app.use('/emu/java', express.static(path.join(SHARED_ROOT, 'java'), { acceptRanges: true }));
 
 // ==================== TRÍCH XUẤT ICON TỪ JAR ====================
 // JAR = file ZIP. Tự viết bộ đọc Central Directory (Node thuần + zlib).
@@ -749,8 +751,12 @@ app.get('/api/launch', (req, res) => {
     return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
   }
 
-  // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
-  const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
+  // Legacy engine 1/2/3 của emulator tự tải JAR bằng XHR tương đối từ main.html.
+  // Vì main.html nằm dưới /emu/, tham số jars=jar/<token> sẽ bị resolve thành
+  // /emu/jar/<token>. Nếu route thực tế không nằm đúng origin/path đó, emulator sẽ
+  // treo ở màn hình "Downloading MIDlet". Để ổn định qua HTTPS/ngrok, truyền URL
+  // tuyệt đối theo root của site để XHR luôn trỏ chính xác vào endpoint tokenized.
+  const emulatorUrl = `/emu/main.html?jars=${encodeURIComponent(`/emu/jar/${token}`)}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
   
   res.json({ success: true, url: emulatorUrl, resolution: r, engine: 'legacy' });
 });
@@ -815,6 +821,12 @@ app.use((req, res, next) => { res.setHeader('X-Platform', PLATFORM); next(); });
 // API nhận diện nền tảng (router port 3000 và frontend có thể gọi để xác nhận)
 app.get('/api/platform', (req, res) => {
   res.json({ platform: PLATFORM, port: PORT });
+});
+
+app.post('/api/legacy-log', express.text({ type: '*/*', limit: '256kb' }), (req, res) => {
+  const line = String(req.body || '').slice(0, 2000);
+  console.log(`[PC][LEGACY] ${line}`);
+  res.json({ ok: true });
 });
 
 // Trang chính

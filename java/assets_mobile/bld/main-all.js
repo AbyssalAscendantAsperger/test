@@ -8,6 +8,11 @@ var enginemode='classesold.jar';
 
 //是否是主页
 var isIndex = window.location.href.indexOf('main.html')==-1;
+try {
+  if (window.parent && window.parent !== window && window.parent.__arenaLegacyDbg) {
+    window.parent.__arenaLegacyDbg('runtime boot isIndex=' + isIndex + ' href=' + window.location.href);
+  }
+} catch (e) {}
 var isLoadJarFinished = false;
 var myflushAll=undefined;
 var mytitle="";
@@ -1069,7 +1074,7 @@ function load(file, responseType) {
   
   var progressBar = document.getElementById('download-bar');
   return new Promise(function(resolve, reject) {
-    var xhr = new XMLHttpRequest({mozSystem:true});
+    var xhr = new XMLHttpRequest();
     xhr.addEventListener("progress", function(event) {
       if (event.lengthComputable && progressBar) {
           var percentage = Math.round((event.loaded * 100) / event.total); 
@@ -1088,7 +1093,7 @@ function load(file, responseType) {
   });
 }
 function loadWithProgress(file, responseType, successCb, failureCb, progressCb, length) {
-  var xhr = new XMLHttpRequest({mozSystem:true});
+  var xhr = new XMLHttpRequest();
   xhr.open("GET", file, true);
   xhr.responseType = responseType;
   if (progressCb) {
@@ -1464,11 +1469,18 @@ if (typeof module === "object") {
       isBuiltIn=true;
     }
     var zip = new ZipFile(jarData, false);
+    if (!zip || !zip.directory) {
+      try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('addBuiltIn FAILED zip.directory missing for ' + jarName + ' bytes=' + (jarData && jarData.byteLength || 0)); } catch (e) {}
+      throw new Error('Zip parse failed for ' + jarName);
+    }
     if(jarName!="java/classes.jar")
     {
       console.log(config)
       var jar = zip.directory;
-      mffile = jar['META-INF/MANIFEST.MF'];
+      mffile = jar['META-INF/MANIFEST.MF'] || jar['meta-inf/manifest.mf'];
+      if (!mffile) {
+        try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('manifest missing in ' + jarName + ' entries=' + Object.keys(jar).slice(0,20).join(',')); } catch (e) {}
+      } else {
       
       mfdata=''
       switch(mffile.compression_method) {
@@ -1485,9 +1497,12 @@ if (typeof module === "object") {
       console.log(MIDP.manifest)
       var a=MIDP.manifest['MIDlet-1'];
       console.log(a)
-      a=a.substr(a.lastIndexOf(',')+1).trim()
-      config.midletClassName = a;
-      console.log("load main class :",config.midletClassName);
+      if (a) {
+        a=a.substr(a.lastIndexOf(',')+1).trim()
+        config.midletClassName = a;
+        console.log("load main class :",config.midletClassName);
+      }
+      }
     }
     jars.set(jarName, {directory:zip.directory, isBuiltIn:isBuiltIn});
   }
@@ -14203,7 +14218,9 @@ if (config.jars) {
 
 var mobileInfo;
 var getMobileInfo = new Promise(function(resolve, reject) {
+  try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('creating getMobileInfo promise'); } catch (e) {}
   var sender = DumbPipe.open("mobileInfo", {}, function(message) {
+    try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('getMobileInfo resolved'); } catch (e) {}
     mobileInfo = message;
     DumbPipe.close(sender);
     resolve();
@@ -14222,6 +14239,7 @@ if(config.enginemode)
  
 if(!isIndex)
 {
+  try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('enter !isIndex block; showDownloadScreen'); } catch (e) {}
   showDownloadScreen();
   var loadingMIDletPromises = [getMobileInfo];
   var loadingPromises = [initFS];
@@ -14230,7 +14248,9 @@ if(!isIndex)
     //启用兼容模式
     classedjarname='java/'+enginemode;
   }
+  try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('loading classes jar ' + classedjarname); } catch (e) {}
   loadingPromises.push(load(classedjarname, "arraybuffer").then(function(data) {
+    try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('loaded classes jar ' + classedjarname + ' bytes=' + (data && data.byteLength || 0)); } catch (e) {}
     JARStore.addBuiltIn("java/classes.jar", data);
     CLASSES.initializeBuiltinClasses();
   }));
@@ -14244,7 +14264,19 @@ if(!isIndex)
     JARStore.loadJAR(config.localjar).then(
       function(res){
         console.log(res);
-        mffile = res.jar['META-INF/MANIFEST.MF'];
+        if (!res || !res.jar) {
+          try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('config.localjar load returned empty for ' + config.localjar); } catch (e) {}
+          return;
+        }
+        mffile = res.jar['META-INF/MANIFEST.MF'] || res.jar['meta-inf/manifest.mf'];
+        if (!mffile) {
+          try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('config.localjar manifest missing for ' + config.localjar); } catch (e) {}
+          setTimeout(function(){ 
+            hideDownloadScreen();
+            isLoadJarFinished=true;
+          },0)
+          return;
+        }
         mfdata=''
         switch(mffile.compression_method) {
           case 0:
@@ -14258,9 +14290,11 @@ if(!isIndex)
         console.log(mfdata);
         processJAD(mfdata);
         var a=MIDP.manifest['MIDlet-1'];
-        a=a.substr(a.lastIndexOf(',')+1).trim()
-        config.midletClassName = a;
-        console.log("load main class :",config.midletClassName); 
+        if (a) {
+          a=a.substr(a.lastIndexOf(',')+1).trim()
+          config.midletClassName = a;
+          console.log("load main class :",config.midletClassName); 
+        }
         
         setTimeout(function(){ 
           hideDownloadScreen();
@@ -14271,13 +14305,18 @@ if(!isIndex)
   }
   else{
       jars.forEach(function(jar) {
+      try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('loading game jar ' + jar); } catch (e) {}
       loadingMIDletPromises.push(load(jar, "arraybuffer").then(function(data) {
+        try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('loaded game jar ' + jar + ' bytes=' + (data && data.byteLength || 0)); } catch (e) {}
         JARStore.addBuiltIn(jar, data,false);  
         hideDownloadScreen(); 
         setTimeout(function(){ 
           hideDownloadScreen();
           isLoadJarFinished=true;
         },0)
+      }, function(err) {
+        try { if (window.parent && window.parent.__arenaLegacyDbg) window.parent.__arenaLegacyDbg('FAILED loading game jar ' + jar + ' err=' + err); } catch (e) {}
+        throw err;
       }));
     });
   }

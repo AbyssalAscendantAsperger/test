@@ -221,12 +221,49 @@ const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
   // emu/web assets phục vụ độc lập trên từng nền tảng
   const me = await get(3001, '/emu/main.html');
   if (me.status === 200) ok('mobie.js (3001) phục vụ /emu/main.html từ assets_mobile'); else bad('mobie /emu/main.html -> ' + me.status);
+  if (me.status === 200 && /JARDownloader/.test(me.body) && /handleEvent/.test(me.body)) ok('mobie legacy main.html có DumbPipe bridge nội bộ cho JARDownloader/mobileInfo');
+  else bad('mobie legacy main.html thiếu DumbPipe bridge nội bộ');
+  const mclasses = await get(3001, '/emu/java/classesold.jar');
+  if (mclasses.status === 200) ok('mobie.js (3001) phục vụ shared legacy classes jar qua /emu/java/classesold.jar'); else bad('mobie /emu/java/classesold.jar -> ' + mclasses.status);
   const mw = await get(3001, '/web/run.html');
   if (mw.status === 200) ok('mobie.js (3001) phục vụ /web/run.html từ assets_mobile'); else bad('mobie /web/run.html -> ' + mw.status);
   const pe = await get(3002, '/emu/main.html');
   if (pe.status === 200) ok('pc.js (3002) phục vụ /emu/main.html từ assets_pc'); else bad('pc /emu/main.html -> ' + pe.status);
+  if (pe.status === 200 && /JARDownloader/.test(pe.body) && /handleEvent/.test(pe.body)) ok('pc legacy main.html có DumbPipe bridge nội bộ cho JARDownloader/mobileInfo');
+  else bad('pc legacy main.html thiếu DumbPipe bridge nội bộ');
+  const pclasses = await get(3002, '/emu/java/classesold.jar');
+  if (pclasses.status === 200) ok('pc.js (3002) phục vụ shared legacy classes jar qua /emu/java/classesold.jar'); else bad('pc /emu/java/classesold.jar -> ' + pclasses.status);
   const pw = await get(3002, '/web/run.html');
   if (pw.status === 200) ok('pc.js (3002) phục vụ /web/run.html từ assets_pc'); else bad('pc /web/run.html -> ' + pw.status);
+
+  // Regression mobile/ngrok: nếu client hủy upload save giữa chừng thì server mobile
+  // phải xử lý êm, không crash vì raw-body "request aborted".
+  const abortedReq = await new Promise(resolve => {
+    const rq = http.request({ host: 'localhost', port: 3001, path: '/api/save?gameId=abortedcheck', method: 'POST', headers: { 'Content-Type': 'text/plain', 'Content-Length': '999999' } });
+    rq.on('error', () => resolve({ ok: true }));
+    rq.write('partial-save-data');
+    setTimeout(() => { try { rq.destroy(); } catch (e) {} resolve({ ok: true }); }, 30);
+  });
+  await new Promise(r => setTimeout(r, 150));
+  const aliveAfterAbort = await get(3001, '/api/platform');
+  try {
+    if (aliveAfterAbort.status === 200 && JSON.parse(aliveAfterAbort.body).platform === 'mobile') ok('mobie.js sống bình thường sau khi client abort /api/save (không crash vì raw-body request aborted)');
+    else bad('mobie.js lỗi sau aborted save request: ' + JSON.stringify(aliveAfterAbort));
+  } catch { bad('mobie.js không phản hồi được sau aborted save request'); }
+
+  // JAR & SAVE dùng chung: lưu save qua mobile, đọc lại qua PC (cùng sid cookie)
+  const launchCheckJson = JSON.parse((await get(3001, '/api/jars')).body || '{}');
+  const launchCheckGame = (launchCheckJson.games || [])[0];
+  if (launchCheckGame) {
+    const launchLegacy = await get(3001, '/api/launch?id=' + launchCheckGame.id + '&enginemode=enginemode2-classes2.jar');
+    try {
+      const launchData = JSON.parse(launchLegacy.body || '{}');
+      if (launchLegacy.status === 200 && /jars=%2Femu%2Fjar%2F/.test(launchData.url || '')) ok('mobie.js tạo URL legacy với jars=/emu/jar/<token> (không còn path tương đối dễ treo Downloading MIDlet)');
+      else bad('mobie.js launch legacy vẫn dùng jars path cũ: ' + JSON.stringify(launchData));
+    } catch {
+      bad('mobie.js trả launch legacy không hợp lệ');
+    }
+  }
 
   // JAR & SAVE dùng chung: lưu save qua mobile, đọc lại qua PC (cùng sid cookie)
   const jarsJson = JSON.parse((await get(3001, '/api/jars')).body || '{}');

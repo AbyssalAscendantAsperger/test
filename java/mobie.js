@@ -75,6 +75,8 @@ const PUBLIC_DIR = path.join(__dirname, 'public_mobile');
 app.use(express.static(PUBLIC_DIR));
 // Fallback web runtime (freej2me-web)
 app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
+// Legacy runtime classes jars are shared from root java/java/*.jar, not inside assets_mobile.
+app.use('/emu/java', express.static(path.join(SHARED_ROOT, 'java'), { acceptRanges: true }));
 
 // ==================== TRÍCH XUẤT ICON TỪ JAR ====================
 // JAR = file ZIP. Tự viết bộ đọc Central Directory (Node thuần + zlib).
@@ -683,7 +685,36 @@ app.post('/api/dedomil/download', express.json({ limit: '32kb' }), async (req, r
 });
 
 // Nhận body save dạng text (JSON)
-app.use('/api/save', express.text({ type: 'text/plain', limit: '200mb' }));
+// Lưu ý cho mobile/ngrok/HTTPS: request save rất dễ bị client hủy giữa chừng
+// khi iframe reload/đóng game/chuyển mode. express.text() sẽ ném raw-body
+// "BadRequestError: request aborted" trước khi vào route, làm log bị spam và
+// đôi khi khiến trải nghiệm tải game ở mode 1/2/3 trông như bị lỗi server.
+//
+// Cách xử lý hiện tại của dự án cho mobile:
+// - vẫn dùng text/plain như cũ để giữ tương thích frontend hiện tại
+// - parse body với verify để giữ raw body vào req.rawBody khi đọc thành công
+// - bắt riêng lỗi aborted / entity.too.large / parse lỗi ngay sau parser
+// - với aborted: trả 499 (client closed request) và KHÔNG coi là crash server
+app.use('/api/save', express.text({
+  type: ['text/plain', 'application/json'],
+  limit: '200mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf ? buf.toString('utf8') : '';
+  }
+}));
+app.use('/api/save', (err, req, res, next) => {
+  if (!err) return next();
+  const kind = String(err && (err.type || err.code || err.message) || '').toLowerCase();
+  const aborted = kind.includes('request aborted') || kind.includes('aborted') || err.type === 'request.aborted';
+  if (aborted) {
+    console.warn(`[MOBILE] save request aborted sid=${req.sid || '-'} gameId=${req.query && req.query.gameId || '-'} ua=${req.headers['user-agent'] || '-'}`);
+    return res.status(499).json({ error: 'client_aborted', message: 'Request was aborted by client.' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'save_too_large', message: 'Save data too large.' });
+  }
+  return res.status(400).json({ error: 'invalid_save_body', message: err.message || 'Invalid request body.' });
+});
 
 // API: Lấy danh sách game (trả gameId, tên, icon, resolution)
 app.get('/api/jars', (req, res) => {
@@ -747,8 +778,12 @@ app.get('/api/launch', (req, res) => {
     return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
   }
 
-  // Quay lại URL đơn giản nhất (Phương pháp ban đầu bạn xác nhận là ổn định)
-  const emulatorUrl = `/emu/main.html?jars=jar/${token}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
+  // Legacy engine 1/2/3 của emulator tự tải JAR bằng XHR tương đối từ main.html.
+  // Vì main.html nằm dưới /emu/, tham số jars=jar/<token> sẽ bị resolve thành
+  // /emu/jar/<token>. Nếu route thực tế không nằm đúng origin/path đó, emulator sẽ
+  // treo ở màn hình "Downloading MIDlet". Để ổn định qua HTTPS/ngrok, truyền URL
+  // tuyệt đối theo root của site để XHR luôn trỏ chính xác vào endpoint tokenized.
+  const emulatorUrl = `/emu/main.html?jars=${encodeURIComponent(`/emu/jar/${token}`)}&canvasSize=${canvasSize}&enginemode=${modeParam}`;
   
   res.json({ success: true, url: emulatorUrl, resolution: r, engine: 'legacy' });
 });
@@ -813,6 +848,12 @@ app.use((req, res, next) => { res.setHeader('X-Platform', PLATFORM); next(); });
 // API nhận diện nền tảng (router port 3000 và frontend có thể gọi để xác nhận)
 app.get('/api/platform', (req, res) => {
   res.json({ platform: PLATFORM, port: PORT });
+});
+
+app.post('/api/legacy-log', express.text({ type: '*/*', limit: '256kb' }), (req, res) => {
+  const line = String(req.body || '').slice(0, 2000);
+  console.log(`[MOBILE][LEGACY] ${line}`);
+  res.json({ ok: true });
 });
 
 // Trang chính
