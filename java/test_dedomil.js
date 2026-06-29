@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
-const srv = require('./server');
+const srv = require('./mobie');
 
 (async () => {
   // 1) Parse search thật với từ khóa Ninja.

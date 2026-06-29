@@ -557,7 +557,7 @@
                 card.className = 'jar-card';
                 const r = game.resolution;
                 const resBadge = r ? '<div class="game-res">' + r.width + '×' + r.height + (group.length > 1 ? '<span class="dup-badge">' + group.length + ' bản</span>' : '') + '</div>' : '';
-                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '</div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + '</div>';
+                const meta = '<div class="meta-line">Dev: ' + escapeHtml(game.dev || 'Unknown') + '</div><div class="meta-line">' + escapeHtml(game.profile || 'Unknown') + (game.config ? ' • ' + escapeHtml(game.config) : '') + '</div>';
                 card.innerHTML = iconHtmlFor(game) + '<div class="game-info"><div class="jar-name">' + escapeHtml(game.name) + '</div>' + resBadge + meta + '<button class="play-btn">▶ Chơi</button></div>';
                 card.onclick = () => { if (group.length > 1) openVersionModal(group); else launchGame(game.id, game.name); };
                 frag.appendChild(card);
@@ -572,7 +572,7 @@
             if (title) title.textContent = 'Chọn phiên bản: ' + (group[0]?.name || 'Game');
             list.innerHTML = group.map(g => {
                 const r = g.resolution;
-                const meta = (r ? r.width + '×' + r.height : '?') + ' • Dev: ' + escapeHtml(g.dev || 'Unknown') + ' • ' + escapeHtml(g.profile || 'Unknown') + (g.version ? ' • v' + escapeHtml(g.version) : '');
+                const meta = (r ? r.width + '×' + r.height : '?') + ' • Dev: ' + escapeHtml(g.dev || 'Unknown') + ' • ' + escapeHtml(g.profile || 'Unknown') + (g.config ? ' • ' + escapeHtml(g.config) : '') + (g.version ? ' • v' + escapeHtml(g.version) : '');
                 return '<div class="version-row" onclick="closeVersionModal(); launchGame(\'' + escapeHtml(g.id) + '\', \'' + escapeHtml(g.name).replace(/'/g, '&#39;') + '\')">' + iconHtmlFor(g) + '<div class="version-info"><div class="version-title">' + escapeHtml(g.name) + '</div><div class="version-meta">' + meta + '</div></div><button class="version-play">Chơi</button></div>';
             }).join('');
             modal.classList.add('visible');

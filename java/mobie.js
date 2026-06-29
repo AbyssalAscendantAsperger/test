@@ -179,6 +179,7 @@ function extractJarMetadata(jarPath) {
   let manifest = {};
   let dev = '';
   let profile = '';
+  let config = '';
   let version = '';
   const mf = dir['META-INF/MANIFEST.MF'] || dir['meta-inf/manifest.mf'];
   if (mf) {
@@ -195,6 +196,9 @@ function extractJarMetadata(jarPath) {
       profile = cleanManifestText(manifest['microedition-profile'] || '');
       const pm = profile.match(/MIDP-\d+(?:\.\d+)?/i);
       if (pm) profile = pm[0].toUpperCase();
+      config = cleanManifestText(manifest['microedition-configuration'] || '');
+      const cm = config.match(/CLDC-\d+(?:\.\d+)?/i);
+      if (cm) config = cm[0].toUpperCase();
       version = cleanManifestText(manifest['midlet-version'] || '');
       iconPath = manifest['midlet-icon'] || null;
       if (!iconPath && midlet1) {
@@ -223,7 +227,7 @@ function extractJarMetadata(jarPath) {
     }
   }
   if (gameName) gameName = cleanManifestText(gameName);
-  return { name: gameName || null, icon, manifest, dev, profile, version, duplicateKey: normalizeDuplicateKey(gameName || '') };
+  return { name: gameName || null, icon, manifest, dev, profile, config, version, duplicateKey: normalizeDuplicateKey(gameName || '') };
 }
 function extractIcon(jarPath) {
   return extractJarMetadata(jarPath).icon;
@@ -369,12 +373,12 @@ function buildGameRegistry() {
     const gameId = 'g' + crypto.createHash('sha1').update(file).digest('hex').slice(0, 14);
     const fileNameFallback = file.replace(/\.jar$/i, '').replace(/[_-]+/g, ' ').trim();
     const fullPath = path.join(JAR_DIR, file);
-    let meta = { name: null, icon: null, dev: '', profile: '', version: '', duplicateKey: '' };
+    let meta = { name: null, icon: null, dev: '', profile: '', config: '', version: '', duplicateKey: '' };
     try { meta = extractJarMetadata(fullPath); } catch (e) {}
     const name = meta.name || cleanManifestText(fileNameFallback);
     const resolution = extractResolution(file);
     const duplicateKey = meta.duplicateKey || normalizeDuplicateKey(name);
-    gameRegistry.set(gameId, { name, file, fullPath, icon: meta.icon, resolution, dev: meta.dev || 'Unknown', profile: meta.profile || 'Unknown', version: meta.version || '', duplicateKey });
+    gameRegistry.set(gameId, { name, file, fullPath, icon: meta.icon, resolution, dev: meta.dev || 'Unknown', profile: meta.profile || 'Unknown', config: meta.config || '', version: meta.version || '', duplicateKey });
   });
 }
 
@@ -723,7 +727,7 @@ app.get('/api/jars', (req, res) => {
     const counts = new Map();
     for (const g of gameRegistry.values()) counts.set(g.duplicateKey, (counts.get(g.duplicateKey) || 0) + 1);
     const games = [...gameRegistry.entries()].map(([id, g]) => ({
-      id, name: g.name, dev: g.dev, profile: g.profile, version: g.version,
+      id, name: g.name, dev: g.dev, profile: g.profile, config: g.config, version: g.version,
       duplicateKey: g.duplicateKey, duplicateCount: counts.get(g.duplicateKey) || 1,
       hasIcon: !!g.icon, resolution: g.resolution
     }));
