@@ -1049,10 +1049,74 @@
 
         function startAutoFit() { stopAutoFit(); autofitTimer = setInterval(() => { if (currentFrame && !closing) fitFrame(); }, 400); }
         function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+        // ===== MODE 5 (CheerpJ) ONLY =====================================
+        // Trên mobile, game CheerpJ render dọc bên trong nhưng <iframe> không có
+        // id="canvas"/"display" nên fitFrame() cũ thoát sớm -> iframe giữ kích thước
+        // mặc định 300x150 (ngang) và trông như bị xoay ngang.
+        // Hàm này lấy kích thước DỌC chuẩn từ chính URL ?width=W&height=H (đã đúng
+        // ngay cả trước khi CheerpJ khởi tạo xong canvas), sau đó scale iframe vừa
+        // khung. KHÔNG đụng tới mode 1/2/3/4.
+        function fitFrameMode5(frame, screenFrame, screenArea) {
+            // 1) Kích thước dọc chuẩn lấy từ URL launch (nguồn đáng tin nhất).
+            let cw = 0, ch = 0;
+            try {
+                const qs = (frame.getAttribute('src') || frame.src || '').split('?')[1] || '';
+                const p = new URLSearchParams(qs);
+                cw = parseInt(p.get('width') || '0', 10);
+                ch = parseInt(p.get('height') || '0', 10);
+            } catch (e) {}
+            // 2) Nếu canvas CheerpJ đã sẵn sàng và CÙNG hướng dọc thì tinh chỉnh theo nó.
+            try {
+                const doc = frame.contentWindow && frame.contentWindow.document;
+                const cont = doc && doc.getElementById('contenedor-juego');
+                const canvas = cont && cont.querySelector('canvas');
+                if (canvas) {
+                    // Dùng kích thước logic (clientWidth/Height) để tránh backing-store
+                    // bị nhân theo devicePixelRatio làm sai tỉ lệ.
+                    const lw = canvas.clientWidth || canvas.width;
+                    const lh = canvas.clientHeight || canvas.height;
+                    // Chỉ tin canvas khi cùng hướng với kích thước yêu cầu (chống lật ngang).
+                    if (lw > 0 && lh > 0) {
+                        const wantPortrait = ch >= cw;
+                        const canvasPortrait = lh >= lw;
+                        if (!cw || !ch || wantPortrait === canvasPortrait) { cw = lw; ch = lh; }
+                    }
+                }
+            } catch (e) {}
+            if (!cw || !ch) return; // CheerpJ chưa boot xong & URL thiếu -> thử lại lần sau.
+            if (cw === frame._fitW && ch === frame._fitH && !frame._fitDirty) return;
+            frame._fitW = cw; frame._fitH = ch; frame._fitDirty = false;
+
+            const maxW = screenArea.clientWidth - 8;
+            const maxH = screenArea.clientHeight - 8;
+            if (maxW <= 0 || maxH <= 0) return;
+
+            const scale = Math.min(maxW / cw, maxH / ch);
+            const realW = Math.floor(cw * scale);
+            const realH = Math.floor(ch * scale);
+
+            // Ép khung & iframe về đúng kích thước dọc, chặn flex kéo dãn thành ngang.
+            screenFrame.style.flex = '0 0 auto';
+            screenFrame.style.alignSelf = 'center';
+            screenFrame.style.width = realW + 'px';
+            screenFrame.style.height = realH + 'px';
+
+            frame.style.flex = '0 0 auto';
+            frame.style.width = cw + 'px';
+            frame.style.height = ch + 'px';
+            frame.style.transformOrigin = 'top left';
+            frame.style.transform = 'scale(' + scale + ')';
+        }
+
         function fitFrame() {
             const frame = document.getElementById('emulatorFrame');
             const screenFrame = document.getElementById('screenFrame');
             const screenArea = document.getElementById('screenArea');
+            // Mode 5 dùng nhánh riêng; mode 1/2/3/4 giữ nguyên logic cũ bên dưới.
+            if (currentEngineKind === 'cheerpj') {
+                try { fitFrameMode5(frame, screenFrame, screenArea); } catch (e) {}
+                return;
+            }
             try {
                 const doc = frame.contentWindow && frame.contentWindow.document; if (!doc) return;
                 let canvas = doc.getElementById('canvas');
