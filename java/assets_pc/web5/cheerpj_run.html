@@ -2,53 +2,62 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
-    <title>J2ME CheerpJ Mode 5</title>
+    <title>J2ME CheerpJ Mode 5 v9</title>
     <style>
-        html, body {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            overflow: hidden;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        #contenedor-juego {
-            position: relative;
-            overflow: hidden;
-            image-rendering: pixelated;
-            outline: none;
-        }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; display: flex; justify-content: center; align-items: center; user-select: none; -webkit-user-select: none; }
+        #contenedor-juego { position: relative; overflow: hidden; image-rendering: pixelated; outline: none; }
     </style>
+    <script>
+        function relayLog(level, args) {
+          try {
+            const msg = args.map(a => (typeof a === 'object' ? (a.stack || JSON.stringify(a)) : String(a))).join(' ');
+            fetch('/api/browser-log', { method: 'POST', body: '[V9-' + level + '] ' + msg, headers: { 'Content-Type': 'text/plain' } }).catch(()=>{});
+          } catch(e){}
+        }
+        const oLog = console.log; console.log = function(...a) { oLog.apply(console, a); relayLog('INFO', a); };
+        const oErr = console.error; console.error = function(...a) { oErr.apply(console, a); relayLog('ERROR', a); };
+        const oWarn = console.warn; console.warn = function(...a) { oWarn.apply(console, a); relayLog('WARN', a); };
+        window.onerror = function(m, u, l, c, e) { relayLog('FATAL', [m, 'at', l + ':' + c, e ? e.stack : '']); };
+        window.onunhandledrejection = function(e) { relayLog('UNHANDLED', [e.reason ? (e.reason.stack || e.reason) : e]); };
+    </script>
     <script src="./cheerpj/4.3/loader.js"></script>
 </head>
 <body>
     <div id="contenedor-juego" tabindex="0"></div>
     <script>
         (async function () {
+            console.log('🌐 Booting CheerpJ Mode 5 (V9 Definitive)...');
             const params = new URLSearchParams(window.location.search);
             const token = params.get('token');
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
-
-            // FreeJ2ME SDL mode status/menu bar compensation
             const displayH = (w === 240 && h === 320) ? 369 : h;
 
             const container = document.getElementById("contenedor-juego");
             container.style.width = w + 'px';
             container.style.height = displayH + 'px';
 
+            console.log('⏳ Initializing CheerpJ VM...');
             await cheerpjInit();
-            cheerpjCreateDisplay(w, displayH, container);
+            console.log('✅ CheerpJ VM initialized.');
 
-            const jarUrl = "/app/emu/jar/" + encodeURIComponent(token);
-            await cheerpjRunMain(
-                "org.recompile.freej2me.FreeJ2ME",
-                "/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar",
-                jarUrl
-            );
+            cheerpjCreateDisplay(w, displayH, container);
+            console.log('🖥️ Display canvas attached.');
+
+            const appJarUrl = "/app/emu/jar/" + encodeURIComponent(token) + ".jar";
+            console.log('🎯 ROM argument:', appJarUrl);
+
+            console.log('🚀 Executing FreeJ2ME Main Class...');
+            try {
+              await cheerpjRunMain(
+                  "org.recompile.freej2me.FreeJ2ME",
+                  "/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar",
+                  appJarUrl
+              );
+              console.log('✨ cheerpjRunMain exited cleanly.');
+            } catch (err) {
+              console.error('❌ Exception in cheerpjRunMain:', err);
+            }
         })();
     </script>
 </body>
