@@ -1,11 +1,18 @@
 @echo off
-REM Khoi dong ca 3 tien trinh: mobie.js (3001) + pc.js (3002) + server.js (3000 router)
+REM ============================================================
+REM J2ME Portal - PC ONLY / PUBLIC_PC MAIN
+REM Sau khi gộp mobile layout + touch hook vào public_pc:
+REM   - Chỉ chạy pc.js
+REM   - Cổng chính: 3002
+REM   - Không chạy mobie.js (3001)
+REM   - Không chạy server.js router (3000)
+REM ============================================================
 cd /d "%~dp0"
+set PORT=
+set PC_PORT=3002
 echo ==============================================
-echo  J2ME Portal - tach logic Mobile / PC
-echo   - MOBILE  : http://localhost:3001  (mobie.js)
-echo   - PC      : http://localhost:3002  (pc.js)
-echo   - ROUTER  : http://localhost:3000  (server.js)
+echo  J2ME Portal - PC ONLY / MAIN PORT 3002
+echo  URL: http://localhost:3002
 echo ==============================================
-node start_all.js
+node pc.js
 pause

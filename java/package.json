@@ -1,16 +1,11 @@
 {
   "name": "j2me-portal",
   "version": "1.0.0",
-  "description": "J2ME Portal - Router (3000) chuyển hướng sang Mobile (3001) và PC (3002); logic tách riêng mobie.js / pc.js, dùng chung jar/ & saves/",
-  "main": "server.js",
+  "description": "J2ME Portal - PC-only/public_pc main server on port 3002 (mobile layout merged into public_pc)",
+  "main": "pc.js",
   "scripts": {
-    "start": "node start_all.js",
-    "start:router": "node server.js",
-    "start:mobile": "node mobie.js",
-    "start:pc": "node pc.js",
-    "build": "node build_check.js",
-    "test": "node build_check.js",
-    "prepare:fallback": "node tools/prepare_fallback_bundle.js"
+    "start": "node pc.js",
+    "start:pc": "node pc.js"
   },
   "dependencies": {
     "express": "^4.22.2"
