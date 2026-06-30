@@ -28,25 +28,45 @@
     <script>
         // Bridge phím ảo từ launcher Node/public/index.html vào AWT/CheerpJ.
         // Parent gửi {type:'cheerpj-key-command', key, code, keyCode, isDown, midpCode}.
-        // Tại đây ta tái phát KeyboardEvent synthetic vào container/canvas/window để
-        // CheerpJ chuyển thành java.awt.event.KeyEvent cho core FreeJ2ME.
-        window.addEventListener('message', function(ev) {
-          const d = ev && ev.data;
-          if (!d || d.type !== 'cheerpj-key-command') return;
-          try {
+        //
+        // FIX v10:
+        // - CheerpJ không cho gọi Java async chồng lên nhau. Nếu gọi
+        //   app.virtualKeyFromJS() liên tiếp mà không await/queue sẽ sinh lỗi:
+        //   "Java code still running, check for a missing 'await'".
+        // - Bản cũ vừa gọi direct Java vừa bắn KeyboardEvent synthetic, dễ thành
+        //   double input/double keyup. Bản này ưu tiên direct virtualKeyFromJS khi
+        //   Java app đã expose; chỉ fallback synthetic KeyboardEvent khi app chưa sẵn sàng.
+        // - De-dupe trạng thái phím để bỏ qua keydown/keyup trùng.
+        (function(){
+          let virtualKeyQueue = Promise.resolve();
+          const keyState = new Map();
+
+          function enqueueVirtualKey(midpCode, isDown) {
+            const code = Number(midpCode || 0);
+            if (!code) return false;
+            if (!window.__freej2meApp || typeof window.__freej2meApp.virtualKeyFromJS !== 'function') return false;
+
+            const prev = keyState.get(code) === true;
+            if (prev === !!isDown) {
+              console.log('[Mode5-KeyBridge] ignore duplicate direct midp=' + code + ' down=' + !!isDown);
+              return true;
+            }
+            keyState.set(code, !!isDown);
+
+            virtualKeyQueue = virtualKeyQueue.then(function(){
+              return window.__freej2meApp.virtualKeyFromJS(code, !!isDown);
+            }).catch(function(e){
+              console.warn('[Mode5-KeyBridge] direct Java virtualKeyFromJS failed/rejected', e);
+            });
+            return true;
+          }
+
+          function dispatchSynthetic(d) {
             const type = d.isDown ? 'keydown' : 'keyup';
             const key = d.key || '';
             const code = d.code || '';
             const keyCode = Number(d.keyCode || 0);
-            const charCode = (type === 'keypress' && key && key.length === 1) ? key.charCodeAt(0) : 0;
-            if (window.__freej2meApp && typeof window.__freej2meApp.virtualKeyFromJS === 'function') {
-              try {
-                const r = window.__freej2meApp.virtualKeyFromJS(Number(d.midpCode || 0), !!d.isDown);
-                if (r && typeof r.catch === 'function') r.catch(function(e){ console.warn('[Mode5-KeyBridge] direct Java virtualKeyFromJS rejected', e); });
-              } catch(e) { console.warn('[Mode5-KeyBridge] direct Java virtualKeyFromJS failed', e); }
-            } else {
-              console.warn('[Mode5-KeyBridge] Java app instance not ready; falling back to synthetic KeyboardEvent');
-            }
+            const charCode = 0;
             const evtInit = { key, code, bubbles: true, cancelable: true, composed: true };
             const evt = new KeyboardEvent(type, evtInit);
             [['keyCode', keyCode], ['which', keyCode], ['charCode', charCode]].forEach(function(pair) {
@@ -67,9 +87,32 @@
                 try { if (t && t.dispatchEvent) t.dispatchEvent(kp); } catch(e) {}
               });
             }
-            console.log('[Mode5-KeyBridge] ' + type + ' key=' + key + ' code=' + code + ' keyCode=' + keyCode + ' midp=' + d.midpCode);
-          } catch(e) { console.warn('[Mode5-KeyBridge] failed', e); }
-        }, false);
+          }
+
+          window.addEventListener('message', function(ev) {
+            const d = ev && ev.data;
+            if (!d || d.type !== 'cheerpj-key-command') return;
+            try {
+              const type = d.isDown ? 'keydown' : 'keyup';
+              const key = d.key || '';
+              const codeName = d.code || '';
+              const keyCode = Number(d.keyCode || 0);
+              const midp = Number(d.midpCode || 0);
+
+              if (enqueueVirtualKey(midp, !!d.isDown)) {
+                console.log('[Mode5-KeyBridge] direct queued ' + type + ' key=' + key + ' code=' + codeName + ' keyCode=' + keyCode + ' midp=' + midp);
+                return;
+              }
+
+              console.warn('[Mode5-KeyBridge] Java app instance not ready; falling back to synthetic KeyboardEvent');
+              dispatchSynthetic(d);
+              console.log('[Mode5-KeyBridge] synthetic ' + type + ' key=' + key + ' code=' + codeName + ' keyCode=' + keyCode + ' midp=' + midp);
+            } catch(e) { console.warn('[Mode5-KeyBridge] failed', e); }
+          }, false);
+
+          window.addEventListener('blur', function(){ keyState.clear(); }, true);
+          document.addEventListener('visibilitychange', function(){ if (document.hidden) keyState.clear(); }, true);
+        })();
     </script>
     <script src="./cheerpj/4.3/loader.js"></script>
 </head>
