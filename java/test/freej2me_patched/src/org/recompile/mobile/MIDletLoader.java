@@ -69,6 +69,7 @@ public class MIDletLoader extends URLClassLoader
 	public static URL baseUrl;
 	private static JarFile jarFile;
 	private static List<JarEntry> jarEntries = new ArrayList<JarEntry>();
+	private static HashSet<String> missingResourceLogCache = new HashSet<String>();
 
 	public String suitename;
 	public String vendorname;
@@ -132,6 +133,7 @@ public class MIDletLoader extends URLClassLoader
 	public MIDletLoader(URL url, Map<String, String> descriptorProperties)
 	{
 		super(new URL[] {url} );
+		resetLoaderState();
 
 		try 
 		{
@@ -253,6 +255,23 @@ public class MIDletLoader extends URLClassLoader
 		if (className[0] == null) { className[0] = findMainClassInJar(url); }
 	}
 
+	private static void resetLoaderState()
+	{
+		try
+		{
+			if(jarFile != null) { jarFile.close(); }
+		}
+		catch (Exception ignored) { }
+
+		baseUrl = null;
+		jarFile = null;
+		jarEntries.clear();
+		missingResourceLogCache.clear();
+		selectedMidlet = 0;
+		MIDletSelected = false;
+		for(int i = 0; i < name.length; i++) { name[i] = null; }
+	}
+
 	public static String findMainClassInJar(URL url) 
 	{
 		// we search for a class file containing "startApp" 
@@ -318,75 +337,127 @@ public class MIDletLoader extends URLClassLoader
 
 	public void start() throws MIDletStateChangeException
 	{
+		boolean hasMultipleMidlets = className[1] != null;
+
+		if(hasMultipleMidlets && shouldAutoSelectMIDlet())
+		{
+			Mobile.log(Mobile.LOG_INFO, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Multiple MIDlets detected. Web auto-select/fallback is enabled.");
+
+			for(int i = 0; i < className.length; i++)
+			{
+				if(className[i] == null) { continue; }
+
+				Mobile.log(Mobile.LOG_INFO, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Auto trying MIDlet #" + (i+1) + ": " + name[i] + " | Main Class: " + className[i]);
+				if(tryStartMIDlet(i)) { return; }
+			}
+
+			Mobile.log(Mobile.LOG_WARNING, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "All auto MIDlet attempts failed. Falling back to manual selector.");
+			selectedMidlet = 0;
+			MIDletSelected = false;
+		}
+
+		if(hasMultipleMidlets) // More than one element, bring up the selection menu
+		{
+			showMIDletSelector();
+		}
+		else
+		{
+			selectedMidlet = 0;
+			MIDletSelected = true;
+		}
+
+		if(!tryStartMIDlet(selectedMidlet))
+		{
+			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "No MIDlet could be started.");
+		}
+	}
+
+	private boolean shouldAutoSelectMIDlet()
+	{
+		return Boolean.getBoolean("freej2me.web") && !Boolean.getBoolean("freej2me.disableAutoMidletSelect");
+	}
+
+	private void showMIDletSelector()
+	{
+		platformImage = MobilePlatform.getLcdBackbuffer();
+		graphics = platformImage.getMIDPGraphics();
+
+		while(!MIDletSelected)
+		{
+			render();
+
+			try
+			{
+				Thread.sleep(16L);
+			}
+			catch (InterruptedException e)
+			{
+				Thread.currentThread().interrupt();
+				break;
+			}
+		}
+	}
+
+	private boolean tryStartMIDlet(int index)
+	{
 		Method start = null;
 
 		try
 		{
-			if(className[1] != null) // More than one element, bring up the selection menu
+			if(index < 0 || index >= className.length || className[index] == null)
 			{
-				platformImage = MobilePlatform.getLcdBackbuffer();
-				graphics = platformImage.getMIDPGraphics();
-
-				while(!MIDletSelected) { render(); }
-				// keyPress() will run until MIDletSelected becomes true
+				Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Invalid MIDlet index: " + index);
+				return false;
 			}
 
-			// If there's only one midlet, load it straight away
+			selectedMidlet = (byte) index;
 			MIDletSelected = true;
-			if(className[selectedMidlet] != null) 
+			mainClass = loadClass(className[selectedMidlet]);
+
+			if(mainClass == null)
 			{
-				mainClass = loadClass(className[selectedMidlet]);
-
-				Constructor constructor;
-				constructor = mainClass.getConstructor();
-				constructor.setAccessible(true);
-
-				if(!Mobile.isDoJa) 
-				{
-					MIDlet.initAppProperties(properties);
-					midletInst = (MIDlet)constructor.newInstance();
-				}
-				else 
-				{
-					IApplication.initAppProperties(properties);
-					IAppliInst = (IApplication) constructor.newInstance();
-				}
-				
+				throw new ClassNotFoundException(className[selectedMidlet]);
 			}
-			
-		}
-		catch (Exception e)
-		{
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Problem Constructing " + name + " class: " +className);
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Reason: "+e.getMessage());
-			e.printStackTrace();
-			return;
-		}
 
-		try
-		{
+			Constructor constructor = mainClass.getConstructor();
+			constructor.setAccessible(true);
+
+			if(!Mobile.isDoJa) 
+			{
+				MIDlet.initAppProperties(properties);
+				midletInst = (MIDlet)constructor.newInstance();
+			}
+			else 
+			{
+				IApplication.initAppProperties(properties);
+				IAppliInst = (IApplication) constructor.newInstance();
+			}
+
+			Class<?> searchClass = mainClass;
 			while (start == null)
 			{
 				try
 				{
-					start = Mobile.isDoJa ? mainClass.getDeclaredMethod("start") : mainClass.getDeclaredMethod("startApp");
+					start = Mobile.isDoJa ? searchClass.getDeclaredMethod("start") : searchClass.getDeclaredMethod("startApp");
 					start.setAccessible(true);
 				}
 				catch (NoSuchMethodException e)
 				{
-					mainClass = mainClass.getSuperclass();
-					if (mainClass == null || mainClass == MIDlet.class || mainClass == IApplication.class) { throw e; }
-
-					mainClass = loadClass(mainClass.getName(), true);
+					searchClass = searchClass.getSuperclass();
+					if (searchClass == null || searchClass == MIDlet.class || searchClass == IApplication.class) { throw e; }
 				}
 			}
+
 			start.invoke(Mobile.isDoJa ? IAppliInst : midletInst);
+			return true;
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Can't invoke startApp Method: " + e.getMessage());
-			e.printStackTrace();
-			return;
+			String midletName = (index >= 0 && index < name.length) ? name[index] : null;
+			String midletClass = (index >= 0 && index < className.length) ? className[index] : null;
+			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Failed to start MIDlet #" + (index+1) + " name=" + midletName + " class=" + midletClass + " reason=" + e);
+			try { e.printStackTrace(); } catch (Throwable ignored) { }
+			return false;
 		}
 	}
 
@@ -735,6 +806,27 @@ public class MIDletLoader extends URLClassLoader
         return null;
     }
 
+	private void logMissingResourceOnce(String resourceName, URL jarUrl)
+	{
+		if(resourceName == null) { return; }
+
+		String key = (jarUrl == null ? "" : jarUrl.toString()) + "!" + resourceName;
+		if(Boolean.getBoolean("freej2me.logMissingResources"))
+		{
+			synchronized(missingResourceLogCache)
+			{
+				if(missingResourceLogCache.add(key))
+				{
+					Mobile.log(Mobile.LOG_WARNING, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Missing resource '" + resourceName + "' in jar: " + jarUrl);
+				}
+			}
+		}
+		else
+		{
+			Mobile.log(Mobile.LOG_DEBUG, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Missing resource '" + resourceName + "' in jar: " + jarUrl);
+		}
+	}
+
     private URL findResourceInJar(URL jarUrl, String resourceName) 
 	{
 		for (JarEntry entry : jarEntries)
@@ -779,7 +871,7 @@ public class MIDletLoader extends URLClassLoader
 			}
 		}
 
-		Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Couldn't find resource '" + resourceName + "' in jar: " + jarUrl);
+		logMissingResourceOnce(resourceName, jarUrl);
 
         return null;
     }
@@ -905,7 +997,7 @@ public class MIDletLoader extends URLClassLoader
 		}
 		catch (Exception e)
 		{
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + resource + " Not Found");
+			Mobile.log(Mobile.LOG_DEBUG, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + resource + " Not Found");
 			return new byte[0];
 		}
 	}
@@ -962,9 +1054,8 @@ public class MIDletLoader extends URLClassLoader
 		}
 		catch (Exception e)
 		{
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Error Adapting Class "+name);
-			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + e.toString());
-			return null;
+			Mobile.log(Mobile.LOG_DEBUG, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Error adapting/loading class " + name + ": " + e.toString());
+			throw new ClassNotFoundException(name, e);
 		}
 
 	}
@@ -1224,7 +1315,7 @@ public class MIDletLoader extends URLClassLoader
 		else if (key == Canvas.DOWN || key == Canvas.KEY_NUM8) 
 		{ 
 			selectedMidlet++;
-			if(selectedMidlet > name.length || name[selectedMidlet] == null) { selectedMidlet--; }
+			if(selectedMidlet >= name.length || name[selectedMidlet] == null) { selectedMidlet--; }
 		}
 		else if (key == Canvas.FIRE || key == Canvas.KEY_NUM5) { MIDletSelected = true; }
 	}
@@ -1262,7 +1353,7 @@ public class MIDletLoader extends URLClassLoader
 		int itemHeight = Font.getDefaultFont().getHeight() - titlePadding;
 	
 		// Calculate the number of visible items
-		int visibleItems = (Mobile.lcdHeight - titleHeight - (2 * titlePadding) - bottomBarHeight) / itemHeight;
+		int visibleItems = Math.max(1, (Mobile.lcdHeight - titleHeight - (2 * titlePadding) - bottomBarHeight) / Math.max(1, itemHeight));
 		int firstVisibleItem = Math.max(0, selectedMidlet - visibleItems / 2);
 		int lastVisibleItem = Math.min(numMidlets - 1, firstVisibleItem + visibleItems - 1);
 	
