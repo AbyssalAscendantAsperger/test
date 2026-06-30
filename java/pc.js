@@ -30,8 +30,14 @@ const JAVA_DIR = ASSETS_DIR; // tương thích tên cũ: mọi tài nguyên emu 
 const JAR_DIR = path.join(SHARED_ROOT, 'jar');          // DÙNG CHUNG (kho JAR)
 const SAVES_DIR = path.join(SHARED_ROOT, 'saves');      // DÙNG CHUNG (save theo phiên/user)
 fs.mkdirSync(SAVES_DIR, { recursive: true });
-const FALLBACK_APPS_DIR = path.join(ASSETS_DIR, 'web', 'apps'); // RIÊNG (cache bundle của PC)
+const FALLBACK_APPS_DIR = path.join(ASSETS_DIR, 'web', 'apps'); // legacy Mode 4 cũ (không còn dùng sau khi xoá Mode 4)
 fs.mkdirSync(FALLBACK_APPS_DIR, { recursive: true });
+// Cache JAR đã chuẩn hoá riêng cho Mode 5/CheerpJ. Không đụng file JAR gốc.
+const MODE5_JAR_CACHE_DIR = path.join(ASSETS_DIR, 'web5', 'mode5_jars');
+fs.mkdirSync(MODE5_JAR_CACHE_DIR, { recursive: true });
+// Tắt mặc định JAR normalizer vì một số game obfuscate/encrypted chạy kém hơn sau khi repack.
+// Chỉ bật thử nghiệm bằng: set MODE5_JAR_NORMALIZE=1
+const MODE5_JAR_NORMALIZE_ENABLED = String(process.env.MODE5_JAR_NORMALIZE || '') === '1';
 
 
 // ==================== MODE 5 CONFIG OVERRIDE (java/config/config.json) ====================
@@ -173,8 +179,7 @@ if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(path.join(__dirname, 'public')));
 }
 
-// Fallback web runtime
-app.use('/web', express.static(path.join(ASSETS_DIR, 'web'), { acceptRanges: true }));
+
 
 // ==================== V9 MIDDLEWARE KIỂM SOÁT TỆP TĨNH /web5 ====================
 app.use('/web5', (req, res, next) => {
@@ -221,7 +226,8 @@ app.get('/emu/jar/:token', (req, res) => {
     return res.status(403).send('Forbidden');
   }
   const game = gameRegistry.get(info.gameId);
-  if (!game || !fs.existsSync(game.fullPath)) {
+  const jarPath = info.jarPath || (game && game.fullPath);
+  if (!game || !jarPath || !fs.existsSync(jarPath)) {
     console.log('[V9-PC][JAR] ❌ Không tìm thấy file ROM game: ' + info.gameId);
     return res.status(404).send('Not found');
   }
@@ -238,7 +244,7 @@ app.get('/emu/jar/:token', (req, res) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Content-Type', 'application/java-archive');
-  res.sendFile(game.fullPath);
+  res.sendFile(jarPath);
 });
 
 // Thăm dò thư mục /emu/jar trả về 200 OK rỗng
@@ -251,6 +257,13 @@ app.use('/emu', express.static(JAVA_DIR));
 // JAR = file ZIP. Tự viết bộ đọc Central Directory (Node thuần + zlib).
 // Không cần cài thêm thư viện ngoài.
 function readZipEntries(buffer) {
+  // Hỗ trợ cả Node Buffer lẫn ArrayBuffer. DataView yêu cầu ArrayBuffer thật;
+  // fs.readFileSync() trả về Buffer nên phải slice đúng byteOffset/byteLength.
+  if (Buffer.isBuffer(buffer)) {
+    buffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  } else if (ArrayBuffer.isView(buffer)) {
+    buffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  }
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
   let pos = bytes.length - 22;
@@ -402,17 +415,12 @@ function extractIcon(jarPath) {
   return extractJarMetadata(jarPath).icon;
 }
 
-function sanitizeFallbackAppId(gameId) {
-  return String(gameId || '').replace(/[^A-Za-z0-9_-]/g, '_');
-}
-function crc32(buf) {
+function crc32ForZip(buf) {
   let c = 0 ^ (-1);
-  for (let i = 0; i < buf.length; i++) {
-    c = (c >>> 8) ^ CRC32_TABLE[(c ^ buf[i]) & 0xFF];
-  }
+  for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC32_TABLE_MODE5[(c ^ buf[i]) & 0xFF];
   return (c ^ (-1)) >>> 0;
 }
-const CRC32_TABLE = (() => {
+const CRC32_TABLE_MODE5 = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
     let c = n;
@@ -421,97 +429,110 @@ const CRC32_TABLE = (() => {
   }
   return table;
 })();
-function dosDateTime(date = new Date()) {
+function dosDateTimeForZip(date = new Date()) {
   const year = Math.max(1980, date.getFullYear());
-  const dosTime = ((date.getHours() & 31) << 11) | ((date.getMinutes() & 63) << 5) | ((Math.floor(date.getSeconds() / 2)) & 31);
-  const dosDate = (((year - 1980) & 127) << 9) | (((date.getMonth() + 1) & 15) << 5) | (date.getDate() & 31);
-  return { dosTime, dosDate };
+  return {
+    dosTime: ((date.getHours() & 31) << 11) | ((date.getMinutes() & 63) << 5) | ((Math.floor(date.getSeconds() / 2)) & 31),
+    dosDate: (((year - 1980) & 127) << 9) | (((date.getMonth() + 1) & 15) << 5) | (date.getDate() & 31)
+  };
 }
-function createZipBuffer(entries) {
-  const localParts = [];
-  const centralParts = [];
+function createMode5ZipBuffer(entries) {
+  const localParts = [], centralParts = [];
   let offset = 0;
-  const { dosTime, dosDate } = dosDateTime();
+  const { dosTime, dosDate } = dosDateTimeForZip();
   for (const entry of entries) {
     const nameBuf = Buffer.from(entry.name.replace(/\\/g, '/'), 'utf8');
-    const dataBuf = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data);
+    const dataBuf = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data || '');
     const compressed = zlib.deflateRawSync(dataBuf);
-    const crc = crc32(dataBuf);
-
+    const crc = crc32ForZip(dataBuf);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(0x0800, 6); // UTF-8 names, no encryption
     local.writeUInt16LE(8, 8);
-    local.writeUInt16LE(dosTime, 10);
-    local.writeUInt16LE(dosDate, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(compressed.length, 18);
-    local.writeUInt32LE(dataBuf.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    local.writeUInt16LE(0, 28);
+    local.writeUInt16LE(dosTime, 10); local.writeUInt16LE(dosDate, 12);
+    local.writeUInt32LE(crc, 14); local.writeUInt32LE(compressed.length, 18); local.writeUInt32LE(dataBuf.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26); local.writeUInt16LE(0, 28);
     localParts.push(local, nameBuf, compressed);
-
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt16LE(dosTime, 12);
-    central.writeUInt16LE(dosDate, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(compressed.length, 20);
-    central.writeUInt32LE(dataBuf.length, 24);
-    central.writeUInt16LE(nameBuf.length, 28);
-    central.writeUInt16LE(0, 30);
-    central.writeUInt16LE(0, 32);
-    central.writeUInt16LE(0, 34);
-    central.writeUInt16LE(0, 36);
-    central.writeUInt32LE(0, 38);
-    central.writeUInt32LE(offset, 42);
+    central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8); central.writeUInt16LE(8, 10);
+    central.writeUInt16LE(dosTime, 12); central.writeUInt16LE(dosDate, 14);
+    central.writeUInt32LE(crc, 16); central.writeUInt32LE(compressed.length, 20); central.writeUInt32LE(dataBuf.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28); central.writeUInt16LE(0, 30); central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34); central.writeUInt16LE(0, 36); central.writeUInt32LE(0, 38); central.writeUInt32LE(offset, 42);
     centralParts.push(central, nameBuf);
-
     offset += local.length + nameBuf.length + compressed.length;
   }
   const centralDir = Buffer.concat(centralParts);
   const localDir = Buffer.concat(localParts);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralDir.length, 12);
-  end.writeUInt32LE(localDir.length, 16);
+  end.writeUInt16LE(0, 4); end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDir.length, 12); end.writeUInt32LE(localDir.length, 16);
   end.writeUInt16LE(0, 20);
   return Buffer.concat([localDir, centralDir, end]);
 }
-function ensureFallbackBundleForGame(gameId) {
-  const game = gameRegistry.get(gameId);
-  if (!game) return null;
-  const appId = sanitizeFallbackAppId(gameId);
-  const bundlePath = path.join(FALLBACK_APPS_DIR, `${appId}.zip`);
-  if (fs.existsSync(bundlePath)) return { appId, bundlePath, created: false };
-  const settings = [
-    `width:${game.resolution.width}`,
-    `height:${game.resolution.height}`,
-    `phone:Nokia`
-  ].join('\n') + '\n';
-  const zipBuffer = createZipBuffer([
-    { name: 'app.jar', data: fs.readFileSync(game.fullPath) },
-    { name: 'settings.txt', data: Buffer.from(settings, 'utf8') },
-    { name: 'name.txt', data: Buffer.from(String(game.name || appId) + '\n', 'utf8') },
-    { name: 'id.txt', data: Buffer.from(appId + '\n', 'utf8') }
-  ]);
-  fs.writeFileSync(bundlePath, zipBuffer);
-  return { appId, bundlePath, created: true };
+function normalizeJarEntryNameForMode5(name) {
+  return String(name || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/(^|\/)\.\//g, '$1')
+    .normalize('NFC');
 }
-function getFallbackBundleStatus(gameId) {
-  const appId = sanitizeFallbackAppId(gameId);
-  const bundlePath = path.join(FALLBACK_APPS_DIR, `${appId}.zip`);
-  return { appId, bundlePath, exists: fs.existsSync(bundlePath) };
+function shouldAddLowercaseResourceAlias(name) {
+  const n = String(name || '');
+  if (!n || n.endsWith('/')) return false;
+  if (/\.class$/i.test(n)) return false;
+  if (/^meta-inf\//i.test(n)) return false;
+  return /[A-Z]/.test(n);
 }
+function ensureMode5CompatibleJar(gameId, game) {
+  const st = fs.statSync(game.fullPath);
+  const key = crypto.createHash('sha1').update(gameId + '|' + game.fullPath + '|' + st.size + '|' + st.mtimeMs).digest('hex').slice(0, 20);
+  const outPath = path.join(MODE5_JAR_CACHE_DIR, sanitizeFileComponent(gameId) + '-' + key + '.jar');
+  if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) return { path: outPath, normalized: true, cached: true };
+  try {
+    const dir = readZipEntries(fs.readFileSync(game.fullPath));
+    if (!dir) return { path: game.fullPath, normalized: false, error: 'bad zip central directory' };
+    const added = new Set();
+    const entries = [];
+    const addEntry = (name, data, aliasOf) => {
+      name = normalizeJarEntryNameForMode5(name);
+      if (!name || added.has(name)) return;
+      added.add(name);
+      entries.push({ name, data, aliasOf });
+    };
+    for (const rawName of Object.keys(dir)) {
+      const e = dir[rawName];
+      if (!rawName || rawName.endsWith('/')) continue;
+      let data;
+      try { data = decompressEntry(e); }
+      catch (err) {
+        console.log('[MODE5-JAR][PC] ⚠️ Không giải nén được entry, giữ JAR gốc cho gameId=' + gameId + ' entry=' + rawName + ' err=' + err.message);
+        return { path: game.fullPath, normalized: false, error: err.message };
+      }
+      const norm = normalizeJarEntryNameForMode5(rawName);
+      addEntry(norm, data, null);
+      // Alias slash/lowercase giúp Mode 5/CheerpJ/Java JarFile tìm resource trong các JAR obfuscate
+      // dùng backslash hoặc case không khớp với getResourceAsStream("data/...").
+      if (shouldAddLowercaseResourceAlias(norm)) addEntry(norm.toLowerCase(), data, norm);
+    }
+    if (!entries.length) return { path: game.fullPath, normalized: false, error: 'empty zip' };
+    fs.writeFileSync(outPath, createMode5ZipBuffer(entries));
+    console.log('[MODE5-JAR][PC] ✅ Đã chuẩn hoá JAR cho Mode 5: gameId=' + gameId + ' entries=' + entries.length + ' file=' + outPath);
+    return { path: outPath, normalized: true, cached: false, entries: entries.length };
+  } catch (e) {
+    console.log('[MODE5-JAR][PC] ⚠️ Không chuẩn hoá được JAR, dùng JAR gốc gameId=' + gameId + ': ' + e.message);
+    return { path: game.fullPath, normalized: false, error: e.message };
+  }
+}
+function sanitizeFileComponent(s) {
+  return String(s || 'x').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'x';
+}
+
 
 // ==================== ANTI-LEAK JAR ====================
 // Mục tiêu: tên file JAR thật KHÔNG BAO GIỜ lộ ra ngoài.
@@ -611,9 +632,9 @@ setInterval(() => {
 const tokenStore = new Map(); // token -> { gameId, createdAt }
 const TOKEN_TTL_MS = 5 * 60 * 1000; // token chỉ sống 5 phút
 
-function issueToken(gameId) {
+function issueToken(gameId, extra = {}) {
   const token = crypto.randomBytes(18).toString('hex');
-  tokenStore.set(token, { gameId, createdAt: Date.now() });
+  tokenStore.set(token, { gameId, createdAt: Date.now(), ...extra });
   return token;
 }
 function verifyToken(token) {
@@ -638,13 +659,14 @@ app.get('/emu/jar/:token', (req, res) => {
   if (!info) return res.status(403).send('Forbidden');
   
   const game = gameRegistry.get(info.gameId);
-  if (!game || !fs.existsSync(game.fullPath)) return res.status(404).send('Not found');
+  const jarPath = info.jarPath || (game && game.fullPath);
+  if (!game || !jarPath || !fs.existsSync(jarPath)) return res.status(404).send('Not found');
   
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Content-Type', 'application/java-archive');
-  res.sendFile(game.fullPath);
+  res.sendFile(jarPath);
 });
 
 // 4) Chặn MỌI truy cập khác vào /emu/jar/ (không token = từ chối)
@@ -915,26 +937,21 @@ app.get('/api/launch', (req, res) => {
     const effectiveHeight = Number(mode5Override.settings.scrheight || mode5Override.runtime.height || r.height);
     const mode5CoreArg = buildMode5CoreArg(mode5Override);
     console.log('[MODE5-CONFIG][PC] gameId=' + id + ' base=' + r.width + 'x' + r.height + ' effective=' + effectiveWidth + 'x' + effectiveHeight + (mode5CoreArg ? ' arg=' + mode5CoreArg : ' arg=<none>'));
+    let mode5Jar = { path: game.fullPath, normalized: false, disabled: true };
+    if (MODE5_JAR_NORMALIZE_ENABLED) {
+      mode5Jar = ensureMode5CompatibleJar(id, game);
+    } else {
+      console.log('[MODE5-JAR][PC] JAR normalizer đang TẮT (an toàn mặc định) — dùng JAR gốc cho gameId=' + id + '. Muốn thử bật: set MODE5_JAR_NORMALIZE=1');
+    }
+    try {
+      const tokenInfo = tokenStore.get(token);
+      if (tokenInfo && mode5Jar && mode5Jar.path) tokenInfo.jarPath = mode5Jar.path;
+    } catch(e) {}
     const cfgParam = mode5CoreArg ? '&cfg=' + encodeURIComponent(mode5CoreArg) : '';
     const cheerpUrl = '/web5/cheerpj_run.html?token=' + encodeURIComponent(token) + '&width=' + effectiveWidth + '&height=' + effectiveHeight + cfgParam;
-    return res.json({ success: true, url: cheerpUrl, resolution: { width: effectiveWidth, height: effectiveHeight }, engine: 'cheerpj', mode5Override: !!mode5CoreArg });
+    return res.json({ success: true, url: cheerpUrl, resolution: { width: effectiveWidth, height: effectiveHeight }, engine: 'cheerpj', mode5Override: !!mode5CoreArg, mode5JarNormalized: !!(mode5Jar && mode5Jar.normalized) });
   }
 
-  if (modeParam === 'enginemode4-freej2me-web') {
-    try {
-      const bundle = ensureFallbackBundleForGame(id);
-      if (bundle && bundle.appId) {
-        const debugKeys = String(req.query.debugkeys || '') === '1' ? '&debugkeys=1' : '';
-      const fallbackUrl = `/web/run.html?app=${encodeURIComponent(bundle.appId)}&fractionScale=1&nokeypad=1${debugKeys}`; 
-        return res.json({ success: true, url: fallbackUrl, resolution: r, engine: 'freej2me-web', appId: bundle.appId, bundleCreated: !!bundle.created });
-      }
-    } catch (e) {
-      return res.status(500).json({ error: 'Không thể tạo fallback bundle', detail: String(e && e.message || e) });
-    }
-    // PC: KHÔNG truyền cờ mobile=1 (đây là logic riêng của PC, không cố tương thích mobile)
-    const launcherUrl = `/web/index.html?fractionScale=1`;
-    return res.json({ success: true, url: launcherUrl, resolution: r, engine: 'freej2me-web', appId: null, warning: 'fallback bundle missing' });
-  }
 
   // Legacy engine 1/2/3 của emulator tự tải JAR bằng XHR tương đối từ main.html.
   // Vì main.html nằm dưới /emu/, tham số jars=jar/<token> sẽ bị resolve thành
@@ -976,29 +993,6 @@ app.post('/api/save', (req, res) => {
   res.json({ ok: true, sid, gameId, size: Buffer.byteLength(body) });
 });
 
-app.post('/api/fallback/prepare', (req, res) => {
-  if (!rateLimitCheck(req.sid)) {
-    return res.status(429).json({ error: 'Quá nhiều yêu cầu. Vui lòng đợi một lát.' });
-  }
-  rebuildGameRegistryIfNeeded();
-  const gameId = req.query.id;
-  const game = gameRegistry.get(gameId);
-  if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
-  try {
-    const bundle = ensureFallbackBundleForGame(gameId);
-    return res.json({ ok: true, gameId, appId: bundle.appId, bundlePath: path.relative(JAVA_DIR, bundle.bundlePath), created: !!bundle.created, status: getFallbackBundleStatus(gameId) });
-  } catch (e) {
-    return res.status(500).json({ error: 'Không thể tạo fallback bundle', detail: String(e && e.message || e) });
-  }
-});
-
-app.get('/api/fallback/status', (req, res) => {
-  rebuildGameRegistryIfNeeded();
-  const gameId = req.query.id;
-  const game = gameRegistry.get(gameId);
-  if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
-  return res.json({ ok: true, gameId, ...getFallbackBundleStatus(gameId) });
-});
 
 // Đánh dấu nền tảng vào MỌI response (giúp router/kiểm thử biết server nào trả lời)
 app.use((req, res, next) => { res.setHeader('X-Platform', PLATFORM); next(); });
@@ -1050,8 +1044,5 @@ module.exports = {
   searchDedomil,
   downloadDedomilGame,
   rebuildGameRegistryIfNeeded,
-  gameRegistry,
-  ensureFallbackBundleForGame,
-  getFallbackBundleStatus,
-  sanitizeFallbackAppId
+  gameRegistry
 };
