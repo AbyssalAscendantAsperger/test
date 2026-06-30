@@ -371,9 +371,21 @@ public class Graphics3D
 
 		Camera worldCamera = world.getActiveCamera();
 
-		if(worldCamera == null) { throw new IllegalStateException("Cannot render a world that has no active camera."); }
+		if(worldCamera == null)
+		{
+			Mobile.log(Mobile.LOG_WARNING, Graphics3D.class.getPackage().getName() + "." + Graphics3D.class.getSimpleName() + ": " + "World has no active camera; using a fallback perspective camera.");
+			worldCamera = new Camera();
+			worldCamera.setPerspective(60.0f, viewh == 0 ? 1.0f : ((float) vieww / (float) viewh), 1.0f, 1000.0f);
+			world.setActiveCamera(worldCamera);
+		}
 
-		if(!worldCamera.getTransformTo(world, tr)) { throw new IllegalStateException("Active camera is not in world."); }
+		if(!worldCamera.getTransformTo(world, tr))
+		{
+			Mobile.log(Mobile.LOG_WARNING, Graphics3D.class.getPackage().getName() + "." + Graphics3D.class.getSimpleName() + ": " + "Active camera is not in world; attaching it to world for compatibility.");
+			try { world.addChild(worldCamera); }
+			catch(Exception ignored) { }
+			if(!worldCamera.getTransformTo(world, tr)) { tr.setIdentity(); }
+		}
 		
 		/* 
 		 * if the bg-img of `world` is not the same format as `this.target`:

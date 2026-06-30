@@ -226,14 +226,14 @@ public class PlatformPlayer implements Player
 					}
 					else if(data.length >= 6 && data[0] == '#' && data[1] == '!' && data[2] == 'A' && data[3] == 'M' && data[4] == 'R' && data[5] == '\n') 
 					{
-						Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "Format is AMR-NB! (not supported yet)");
+						Mobile.log(Mobile.LOG_WARNING, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "Format is AMR-NB! (not supported yet)");
 						contentType = "audio/amr (stub)";
 						player = new audioplayer();
 						disableControls = true;
 					} 
 					else if(data.length >= 9 && data[0] == '#' && data[1] == '!' && data[2] == 'A' && data[3] == 'M' && data[4] == 'R' && data[5] == '-' && data[6] == 'W' && data[7] == 'B' && data[8] == '\n') 
 					{
-						Mobile.log(Mobile.LOG_ERROR, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "Format is AMR-WB! (not supported yet)");
+						Mobile.log(Mobile.LOG_WARNING, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + "Format is AMR-WB! (not supported yet)");
 						contentType = "audio/amr-wb (stub)";
 						player = new audioplayer();
 						disableControls = true;
@@ -642,6 +642,49 @@ public class PlatformPlayer implements Player
 		}
 	}
 
+	private static float clampGain(FloatControl control, float dB)
+	{
+		if(control == null) { return dB; }
+		if(dB < control.getMinimum()) { return control.getMinimum(); }
+		if(dB > control.getMaximum()) { return control.getMaximum(); }
+		return dB;
+	}
+
+	private static float applySafeGain(float dB)
+	{
+		return Mobile.audioSafe ? dB + Mobile.audioGainDb : dB;
+	}
+
+	private static int applySafeMidiVolume(int value)
+	{
+		if(value < 0) { value = 0; }
+		if(value > 127) { value = 127; }
+		if(Mobile.audioSafe) { value = (int) (value * Mobile.audioToneVolumeScale); }
+		if(value < 0) { value = 0; }
+		if(value > 127) { value = 127; }
+		return value;
+	}
+
+	private static boolean reserveSfxSlot()
+	{
+		if(!Mobile.audioSafe) { return true; }
+		synchronized(PlatformPlayer.class)
+		{
+			if(Mobile.activeSfxCount >= Mobile.audioMaxSfx) { return false; }
+			Mobile.activeSfxCount++;
+			return true;
+		}
+	}
+
+	private static void releaseSfxSlot()
+	{
+		if(!Mobile.audioSafe) { return; }
+		synchronized(PlatformPlayer.class)
+		{
+			if(Mobile.activeSfxCount > 0) { Mobile.activeSfxCount--; }
+		}
+	}
+
 	// Players //
 
 	private class audioplayer
@@ -904,6 +947,7 @@ public class PlatformPlayer implements Player
 		{ 
 			try 
 			{
+				WAVTools.refreshHostSampleRate();
 				if(!hasMidiPlaybackEvents && !hasPcmStreams())
 				{
 					state = Player.PREFETCHED;
@@ -952,6 +996,14 @@ public class PlatformPlayer implements Player
 						if(wavStreams[i] == null) { continue; }
 
 						wavClips[i] = AudioSystem.getClip();
+						wavClips[i].addLineListener(new LineListener()
+						{
+							@Override
+							public void update(LineEvent event)
+							{
+								if(event.getType() == LineEvent.Type.STOP) { releaseSfxSlot(); }
+							}
+						});
 						wavClips[i].open(wavStreams[i]);
 					} 
 				}
@@ -1025,11 +1077,11 @@ public class PlatformPlayer implements Player
 			synchronized(pcmClipLock)
 			{
 				if (wavClips == null || pcmIndex < 0 || pcmIndex >= wavClips.length || wavClips[pcmIndex] == null) { return; }
-				for(int i = 0; i < wavClips.length; i++) 
-				{ 
-					if(wavClips[i] == null) { continue; }
-					wavClips[i].stop(); 
-					wavClips[i].flush(); 
+				boolean reservedSlot = false;
+				if(Mobile.audioSafe && !wavClips[pcmIndex].isRunning())
+				{
+					reservedSlot = reserveSfxSlot();
+					if(!reservedSlot) { return; }
 				}
 
 				// Set volume based on matched "velocity" value
@@ -1037,13 +1089,15 @@ public class PlatformPlayer implements Player
 				
 				// Calculate volume based on velocity
 				float dB = -30.0f + ((velocity / 127.0f) * (30.0f));
-				
-				if(dB > 6.0f) { dB = 6.0f; }
+				dB = applySafeGain(dB);
+				if(Mobile.audioSafe && dB > Mobile.audioSmafPcmGainMaxDb) { dB = Mobile.audioSmafPcmGainMaxDb; }
+				dB = clampGain(volumeControl, dB);
 				// Set the volume
 				volumeControl.setValue(dB);
 
 				wavClips[pcmIndex].setFramePosition(0);
 				wavClips[pcmIndex].start();
+				if(reservedSlot && !wavClips[pcmIndex].isRunning()) { releaseSfxSlot(); }
 			}
 		}
 
@@ -1222,7 +1276,9 @@ public class PlatformPlayer implements Player
 				for(int i = 0; i < wavClips.length; i++)
 				{
 					if(wavClips[i] == null) { continue; }
+					boolean wasRunning = wavClips[i].isRunning();
 					wavClips[i].stop();
+					if(wasRunning) { releaseSfxSlot(); }
 					wavClips[i].flush();
 				}
 			}
@@ -1328,6 +1384,7 @@ public class PlatformPlayer implements Player
 		{ 
 			try
 			{
+				WAVTools.refreshHostSampleRate();
 				if(wavClip == null) { wavClip = AudioSystem.getClip(); }
 
 				/* Process the wave data */
@@ -1360,6 +1417,7 @@ public class PlatformPlayer implements Player
 					{
 						if (event.getType() == LineEvent.Type.STOP) 
 						{
+							releaseSfxSlot();
 							state = Player.PREFETCHED;
 							if(numLoops != 0) 
 							{
@@ -1383,17 +1441,26 @@ public class PlatformPlayer implements Player
 
 		public void start()
 		{
+			boolean reservedSlot = false;
+			if(Mobile.audioSafe && !wavClip.isRunning())
+			{
+				reservedSlot = reserveSfxSlot();
+				if(!reservedSlot) { return; }
+			}
 			if(getMediaTime() >= getDuration()) { setMediaTime(0); }
 
 			state = Player.STARTED;
 			notifyListeners(PlayerListener.STARTED, getMediaTime());
 
 			wavClip.start();
+			if(reservedSlot && !wavClip.isRunning()) { releaseSfxSlot(); }
 		}
 
 		public void stop()
 		{
+			boolean wasRunning = wavClip.isRunning();
 			wavClip.stop();
+			if(wasRunning) { releaseSfxSlot(); }
 			wavClip.flush();
 			state = Player.PREFETCHED;
 			notifyListeners(PlayerListener.STOPPED, getMediaTime());
@@ -1880,7 +1947,7 @@ public class PlatformPlayer implements Player
 				{
 					if(((midiPlayer)player).synthesizer == null) { return getLevel(); } // Only make changes if the midi subsystem for this player is available
 
-					volumeSysEx[6] = isMuted() ? 0 : (byte) (level * 127 / 100); // Convert to MIDI volume range
+					volumeSysEx[6] = isMuted() ? 0 : (byte) applySafeMidiVolume(level * 127 / 100); // Convert to MIDI volume range
 					sysexMessage.setMessage(volumeSysEx, volumeSysEx.length);
 					((midiPlayer)player).receiver.send(sysexMessage, -1); // Send the volume change message
 				}
@@ -1889,19 +1956,20 @@ public class PlatformPlayer implements Player
 					wavPlayer wav = (wavPlayer) player;
 
 					/* We have to map 0 <= value <= 100 to a clip's range of -30dB to 0dB  */
-					float dB = isMuted() ? -80.0f : -30.0f + ((level / 100.0f) * (30.0f));
+					float dB = isMuted() ? -80.0f : applySafeGain(-30.0f + ((level / 100.0f) * (30.0f)));
 
 					FloatControl volumeControl = (FloatControl) wav.wavClip.getControl(FloatControl.Type.MASTER_GAIN);
-					volumeControl.setValue(dB);
+					volumeControl.setValue(clampGain(volumeControl, dB));
 				}
 				else if(player instanceof SMAFPlayer) // SMAF is a mix of midi and wavPlayer, so it pretty much borrows from both here
 				{
 					FloatControl volumeControl;
-					float dB = isMuted() ? -80.0f : -40.0f + ((level / 100.0f) * (40.0f));
+					float dB = isMuted() ? -80.0f : applySafeGain(-40.0f + ((level / 100.0f) * (40.0f)));
+					if(Mobile.audioSafe && dB > Mobile.audioSmafPcmGainMaxDb) { dB = Mobile.audioSmafPcmGainMaxDb; }
 
 					if(((SMAFPlayer)player).synthesizer == null) { return getLevel(); } // Only make changes if the midi subsystem for this player is available
 
-					volumeSysEx[6] = isMuted() ? 0 : (byte) (level * 127 / 100);
+					volumeSysEx[6] = isMuted() ? 0 : (byte) applySafeMidiVolume(level * 127 / 100);
 					sysexMessage.setMessage(volumeSysEx, volumeSysEx.length);
 					((SMAFPlayer)player).receiver.send(sysexMessage, -1); // Send the volume change message
 
@@ -1911,11 +1979,11 @@ public class PlatformPlayer implements Player
 						{
 							if(((SMAFPlayer) player).wavClips[i] == null) { continue; }
 							volumeControl = (FloatControl) ((SMAFPlayer) player).wavClips[i].getControl(FloatControl.Type.MASTER_GAIN);
-							volumeControl.setValue(dB);
+							volumeControl.setValue(clampGain(volumeControl, dB));
 						}
 					}
 				}
-				else if(player instanceof MP3Player) { ((MP3Player)player).mp3Player.setLevel(level); }
+				else if(player instanceof MP3Player) { ((MP3Player)player).mp3Player.setLevel(Mobile.audioSafe ? (int)(level * Mobile.audioToneVolumeScale) : level); }
 			}
 			catch(Exception e) 
 			{ 
@@ -2092,7 +2160,7 @@ public class PlatformPlayer implements Player
 			int index = 1; // the very first index is just the VERSION number, so skip it
 			int tempo = 120; // Default MIDI tempo in BPM
 			int currentTick = 0; // This is used to keep track of the current tick, used by SetVolume and Tempo events
-			int noteVolume = 127; // Start sending notes at the max volume by default
+			int noteVolume = applySafeMidiVolume(127); // Start sending notes at the max volume by default
 
 			while (index < sequence.length) 
 			{
@@ -2119,7 +2187,7 @@ public class PlatformPlayer implements Player
 				}
 				else if (eventType == ToneControl.SET_VOLUME) 
 				{
-					noteVolume = sequence[index++];
+					noteVolume = applySafeMidiVolume(sequence[index++]);
 					try 
 					{ 
 						ShortMessage volumeMessage = new ShortMessage();

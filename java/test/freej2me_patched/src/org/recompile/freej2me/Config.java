@@ -133,7 +133,7 @@ public class Config
 				settings.put("spdhacknoalpha", "off");
 				settings.put("compatfantasyzonefix", "off");
 				settings.put("compattranstooriginonreset", "off");
-				settings.put("compatimmediaterepaints", "off");
+				settings.put("compatimmediaterepaints", "on");
 				settings.put("compatoverrideplatchecks", "on");
 				settings.put("compatsiemensfriendlydrawing", "off");
 				settings.put("compatignorevolumechanges", "off");
@@ -160,6 +160,12 @@ public class Config
 				sysSettings.put("dumpAudioStreams", "off");
 				sysSettings.put("dumpGraphicsObjects", "off");
 				sysSettings.put("sound", "on");
+				sysSettings.put("audioSafe", "on");
+				sysSettings.put("audioGainDb", "-9");
+				sysSettings.put("audioSampleRate", "44100");
+				sysSettings.put("audioMaxSfx", "4");
+				sysSettings.put("audioToneVolumeScale", "70");
+				sysSettings.put("audioSmafPcmGainMaxDb", "-6");
 				sysSettings.put("soundfont", "Default");
 				sysSettings.put("textfont", "Default");
 				// AWT Inputs
@@ -215,7 +221,7 @@ public class Config
 			if(!settings.containsKey("spdhacknoalpha")) { settings.put("spdhacknoalpha", "off"); }
 			if(!settings.containsKey("compatfantasyzonefix")) { settings.put("compatfantasyzonefix", "off"); }
 			if(!settings.containsKey("compattranstooriginonreset")) { settings.put("compattranstooriginonreset", "off"); }
-			if(!settings.containsKey("compatimmediaterepaints")) { settings.put("compatimmediaterepaints", "off"); }
+			if(!settings.containsKey("compatimmediaterepaints")) { settings.put("compatimmediaterepaints", "on"); }
 			if(!settings.containsKey("compatoverrideplatchecks")) { settings.put("compatoverrideplatchecks", "on"); }
 			if(!settings.containsKey("compatsiemensfriendlydrawing")) { settings.put("compatsiemensfriendlydrawing", "off"); }
 			if(!settings.containsKey("compatignorevolumechanges")) { settings.put("compatignorevolumechanges", "off"); }
@@ -251,6 +257,12 @@ public class Config
 			if(!sysSettings.containsKey("soundfont")) { sysSettings.put("soundfont", "Default"); }
 			if(!sysSettings.containsKey("textfont")) { sysSettings.put("textfont", "Default"); }
 			if(!sysSettings.containsKey("sound")) { sysSettings.put("sound", "on"); }
+			if(!sysSettings.containsKey("audioSafe")) { sysSettings.put("audioSafe", "on"); }
+			if(!sysSettings.containsKey("audioGainDb")) { sysSettings.put("audioGainDb", "-9"); }
+			if(!sysSettings.containsKey("audioSampleRate")) { sysSettings.put("audioSampleRate", "44100"); }
+			if(!sysSettings.containsKey("audioMaxSfx")) { sysSettings.put("audioMaxSfx", "4"); }
+			if(!sysSettings.containsKey("audioToneVolumeScale")) { sysSettings.put("audioToneVolumeScale", "70"); }
+			if(!sysSettings.containsKey("audioSmafPcmGainMaxDb")) { sysSettings.put("audioSmafPcmGainMaxDb", "-6"); }
 			// AWT Inputs
 			if(!sysSettings.containsKey("input_LeftSoft"))    { sysSettings.put("input_LeftSoft", ""     + inputKeycodes[0]); }
 			if(!sysSettings.containsKey("input_RightSoft"))   { sysSettings.put("input_RightSoft", ""    + inputKeycodes[1]); }

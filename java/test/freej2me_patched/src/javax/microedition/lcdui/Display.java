@@ -275,32 +275,20 @@ public class Display
 				Displayable prev = current;
 				if (next == null || current == next) { return; }
 
-				// Alert and Canvas preparation
+				// Make the new displayable effective before showNotify(). Many games
+				// start their render thread from showNotify() and immediately call
+				// repaint()/flushGraphics(); if current is not assigned yet, isShown()
+				// returns false and the first frame is dropped, causing white screens.
 				try 
 				{
 					if(next instanceof Alert) { ((Alert) next).setNextScreen(current); }
-					
-					// Call upon showNotify right before the new canvas is made visible
+					current = next;
+					if (prev instanceof Canvas) { ((Canvas) prev).hideNotify(); }
 					if (next instanceof Canvas) { ((Canvas) next).showNotify(); }
 				}
 				catch (Exception e)
 				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent Alert/Canvas preparation block failed: " + e.getMessage());
-					e.printStackTrace();
-				}
-
-				// displayable setup and hideNotify
-				try 
-				{
-					// Make the new displayable effective
-					current = next;
-
-					// Call upon hideNotify right after removing the previous canvas from the display
-					if (prev instanceof Canvas) { ((Canvas) prev).hideNotify(); }
-				}
-				catch (Exception e)
-				{
-					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent displayable setup and hideNotify block failed: " + e.getMessage());
+					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent displayable/showNotify block failed: " + e.getMessage());
 					e.printStackTrace();
 				}
 
@@ -318,8 +306,10 @@ public class Display
 							maxWait--;
 						}
 
-						// Still wasn't shown by the application itself? Force it to be
+						// Still wasn't shown by the application itself? Force it to be.
 						if(!((Canvas) current).hasBeenDrawnAfterSet()) { ((Canvas) current).repaint(0, 0, current.getWidth(), current.getHeight()); }
+						// Also service any repaint requested before/inside showNotify().
+						((Canvas) current).serviceRepaints();
 					}
 					else { current.notifySetCurrent(); } // Displayables other than canvas have drawing dictated entirely by FreeJ2ME, so always force a draw to happen on setCurrent
 				}

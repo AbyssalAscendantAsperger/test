@@ -55,8 +55,7 @@ extends PlatformFont {
     }
 
     public static Font getFont(int n, int n2, int n3) {
-        System.out.println("[ARENA-V6-FONT] LCDUI Font.getFont req face=" + n + " style=" + n2 + " size=" + n3 + " -> OVERRIDING TO SYSTEM/PLAIN!");
-        return new Font(0, 0, n3);
+        return new Font(n, n2, n3);
     }
 
     public boolean isBold() {

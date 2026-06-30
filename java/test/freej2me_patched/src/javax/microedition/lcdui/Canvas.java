@@ -307,7 +307,11 @@ extends Displayable {
     }
 
     public void repaint(final int n, final int n2, final int n3, final int n4) {
-        if (!this.isShown() || this.listCommands || this.servicing) {
+        if (this.listCommands || this.servicing) {
+            return;
+        }
+        if (!this.isShown()) {
+            this.pendingRepaint.set(true);
             return;
         }
         if (!Mobile.compatImmediateRepaints) {
@@ -322,6 +326,7 @@ extends Displayable {
             this.pendingRepaint.set(true);
         } else {
             this.repaintRequest(n, n2, n3, n4);
+            this.pendingRepaint.set(false);
         }
     }
 
@@ -329,7 +334,11 @@ extends Displayable {
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     public void repaintRequest(int n, int n2, int n3, int n4) {
-        if (!this.isShown() || this.listCommands) {
+        if (this.listCommands) {
+            return;
+        }
+        if (!this.isShown()) {
+            this.pendingRepaint.set(true);
             return;
         }
         this.firstDrawn = true;

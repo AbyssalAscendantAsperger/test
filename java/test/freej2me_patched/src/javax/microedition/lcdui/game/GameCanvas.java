@@ -56,8 +56,13 @@ public abstract class GameCanvas extends Canvas
 
 	public void flushGraphics(int x, int y, int width, int height)
 	{
-		if (width <= 0 || height <= 0 || x + width < 0 || y + height < 0 || x >= this.width || y >= this.height || !isShown()) { return; }
+		if (buffer == null || width <= 0 || height <= 0 || x + width < 0 || y + height < 0 || x >= this.width || y >= this.height) { return; }
 
+		// Some games draw/flush their first frame from showNotify() or immediately
+		// around setCurrent(). In web/CheerpJ, isShown() can lag just enough to
+		// drop that first flush and leave the game white. Flush the backbuffer
+		// anyway; once a different Displayable is current, normal game loops will
+		// replace it on the next frame.
 		Mobile.getPlatform().flushGraphics(buffer, x, y, width, height);
 	}
 

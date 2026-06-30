@@ -660,6 +660,12 @@ public class FreeJ2ME {
             if (stringArray.length >= 8) {
                 Mobile.config.settings.put("dojaversion", "" + FreeJ2ME.parseIntArg(stringArray[7], FreeJ2ME.parseIntArg(Mobile.config.settings.get("dojaversion"), 200)) + "");
             }
+            if (webMode) {
+                // Web/CheerpJ is much more sensitive to asynchronous repaint timing.
+                // Default to immediate repaint in web mode to avoid white screens in games
+                // that draw their first frame during setCurrent()/showNotify().
+                Mobile.config.settings.put("compatimmediaterepaints", "on");
+            }
             if (webMode && stringArray.length >= 5) {
                 FreeJ2ME.applyMode5CoreArg(stringArray[4]);
             }

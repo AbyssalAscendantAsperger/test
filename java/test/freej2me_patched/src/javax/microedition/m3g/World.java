@@ -30,7 +30,19 @@ public class World extends Group
 	{ 
 		removeReference(this.camera);
 		this.camera = camera;
-		removeReference(this.camera);
+		addReference(this.camera);
+		if(this.camera != null && this.camera.getParent() == null)
+		{
+			/*
+			 * Compatibility: some commercial M3G assets / game code set a camera as
+			 * active without adding it as a World child first. Strict JSR-184 render()
+			 * later rejects that camera as not being in the world, and some games then
+			 * hit NullPointerException in their addCamera/init path. Attach it here so
+			 * active cameras are reachable from the world graph.
+			 */
+			try { addChild(this.camera); }
+			catch(Exception ignored) { }
+		}
 	}
 
 	public Background getBackground() { return background; }

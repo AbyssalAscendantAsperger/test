@@ -100,6 +100,13 @@ public class Mobile {
     private static final int[] sdlguiKeycodes;
     private static final String[] keyArray;
     public static boolean sound;
+    public static boolean audioSafe;
+    public static float audioGainDb;
+    public static int audioSampleRate;
+    public static int audioMaxSfx;
+    public static float audioToneVolumeScale;
+    public static float audioSmafPcmGainMaxDb;
+    public static int activeSfxCount;
     public static int limitFPS;
     public static byte unlockFramerateHack;
     public static boolean isFastForwarding;
@@ -1417,6 +1424,40 @@ public class Mobile {
         }
     }
 
+    private static int parseIntSetting(String value, int fallback, int min, int max) {
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        }
+        catch (Exception exception) {
+            parsed = fallback;
+        }
+        if (parsed < min) {
+            parsed = min;
+        }
+        if (parsed > max) {
+            parsed = max;
+        }
+        return parsed;
+    }
+
+    private static float parseFloatSetting(String value, float fallback, float min, float max) {
+        float parsed;
+        try {
+            parsed = Float.parseFloat(value);
+        }
+        catch (Exception exception) {
+            parsed = fallback;
+        }
+        if (parsed < min) {
+            parsed = min;
+        }
+        if (parsed > max) {
+            parsed = max;
+        }
+        return parsed;
+    }
+
     public static boolean updateSettings() {
         String string;
         String string2;
@@ -1435,6 +1476,12 @@ public class Mobile {
         if (string4.equals("on")) {
             sound = true;
         }
+        audioSafe = !Mobile.config.sysSettings.get("audioSafe").equals("off");
+        audioGainDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioGainDb"), -9.0f, -48.0f, 0.0f);
+        audioSampleRate = Mobile.parseIntSetting(Mobile.config.sysSettings.get("audioSampleRate"), 44100, 8000, 96000);
+        audioMaxSfx = Mobile.parseIntSetting(Mobile.config.sysSettings.get("audioMaxSfx"), 4, 1, 32);
+        audioToneVolumeScale = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioToneVolumeScale"), 70.0f, 0.0f, 100.0f) / 100.0f;
+        audioSmafPcmGainMaxDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioSmafPcmGainMaxDb"), -6.0f, -48.0f, 0.0f);
         if ((string2 = Mobile.config.sysSettings.get("soundfont")).equals("Custom") && !useCustomMidi) {
             useCustomMidi = true;
             Manager.changeCustomMidi();
@@ -1713,6 +1760,13 @@ public class Mobile {
         sdlguiKeycodes = new int[]{7, 5, 4, 13, 9, 6, 8, 18, 19, 10, 11, 0, 1, 2, 3, 14, 15, 16, 17, 20};
         keyArray = new String[]{"Up", "Down", "Left", "Right", "9", "7", "0", "Fire", "RightSoft", "LeftSoft", "1", "3", "*", "#", "2", "4", "6", "8", "5", "CLR", "Fast Forward", "Screenshot", "MIDlet Pause/Resume"};
         sound = true;
+        audioSafe = true;
+        audioGainDb = -9.0f;
+        audioSampleRate = 44100;
+        audioMaxSfx = 4;
+        audioToneVolumeScale = 0.70f;
+        audioSmafPcmGainMaxDb = -6.0f;
+        activeSfxCount = 0;
         limitFPS = 0;
         unlockFramerateHack = 0;
         isFastForwarding = false;

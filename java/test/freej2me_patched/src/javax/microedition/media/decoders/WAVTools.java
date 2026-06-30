@@ -38,7 +38,7 @@ public final class WAVTools
 
 	static // Get the host device's sample rate when this class is initially created, getDefaultAudioSampleRate() is rather expensive to call
 	{
-		hostSampleRate = getDefaultAudioSampleRate();
+		hostSampleRate = 44100;
 	}
 
     /*
@@ -381,8 +381,16 @@ public final class WAVTools
 		return upsample(convertedWav, sampleRate, hostSampleRate, (short) numChannels, (short) 16, convertedWav.length);
 	}
 
+	public static final void refreshHostSampleRate()
+	{
+		if(Mobile.audioSampleRate >= 8000 && Mobile.audioSampleRate <= 96000) { hostSampleRate = Mobile.audioSampleRate; }
+		else if(hostSampleRate <= 0) { hostSampleRate = 44100; }
+	}
+
 	public static final byte[] upsample(byte[] input, int originalSampleRate, int newSampleRate, short numChannels, short numBits, int inputLength) 
 	{
+		if(newSampleRate <= 0) { newSampleRate = 44100; }
+		if(originalSampleRate <= 0) { originalSampleRate = newSampleRate; }
 		inputLength = Math.min(input.length, inputLength); // Some wav files might report a sample length bigger than the actual data (Shadow Shoot)
 
 		final int newLength = (int) (inputLength * ((double) newSampleRate / originalSampleRate));

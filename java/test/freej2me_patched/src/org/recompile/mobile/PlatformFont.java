@@ -5,8 +5,12 @@ package org.recompile.mobile;
 
 import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.GraphicsEnvironment;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import javax.microedition.lcdui.Font;
 import org.recompile.mobile.Mobile;
 
@@ -27,6 +31,9 @@ public class PlatformFont {
     private static Graphics gc;
     public java.awt.Font awtFont;
     private static final File textfontDir;
+    private static boolean fontsRegistered = false;
+    private static String defaultFontFamily = "Noto Sans";
+    private static String monoFontFamily = "Noto Sans Mono";
 
     public PlatformFont(int n, int n2, int n3, boolean bl) {
         Object var5_5 = null;
@@ -40,7 +47,8 @@ public class PlatformFont {
         this.face = n;
         this.style = n2;
         this.size = n3;
-        this.awtFont = new java.awt.Font("SansSerif", 0, this.getPointSize());
+        registerBundledFonts();
+        this.awtFont = new java.awt.Font(this.resolveAwtFontFamily(), this.resolveAwtFontStyle(), this.getPointSize());
         if (gc == null) {
             gc = new BufferedImage(1, 1, 1).getGraphics();
         }
@@ -172,6 +180,160 @@ public class PlatformFont {
             }
         }
         return fontSizes[4 * screenType + 1] + Mobile.fontSizeOffset;
+    }
+
+    private String resolveAwtFontFamily() {
+        int lcdFace = this.isLCDUI ? this.face : this.convertDoJaToLCDUIFace(this.face);
+        if (lcdFace == 32 && isFamilyAvailable(monoFontFamily)) {
+            return monoFontFamily;
+        }
+        if (isFamilyAvailable(defaultFontFamily)) {
+            return defaultFontFamily;
+        }
+        if (isFamilyAvailable("Noto Sans CJK JP")) {
+            return "Noto Sans CJK JP";
+        }
+        if (isFamilyAvailable("Noto Sans CJK SC")) {
+            return "Noto Sans CJK SC";
+        }
+        if (isFamilyAvailable("Noto Sans")) {
+            return "Noto Sans";
+        }
+        return "Dialog";
+    }
+
+    private int resolveAwtFontStyle() {
+        int lcdStyle = this.isLCDUI ? this.style : this.convertDoJaToLCDUIStyle(this.style);
+        int awtStyle = java.awt.Font.PLAIN;
+        if ((lcdStyle & 1) != 0) {
+            awtStyle |= java.awt.Font.BOLD;
+        }
+        if ((lcdStyle & 2) != 0) {
+            awtStyle |= java.awt.Font.ITALIC;
+        }
+        return awtStyle;
+    }
+
+    private static boolean isFamilyAvailable(String family) {
+        String[] names = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+        for (int i = 0; i < names.length; i++) {
+            if (names[i].equalsIgnoreCase(family)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static synchronized void registerBundledFonts() {
+        if (fontsRegistered) {
+            return;
+        }
+        fontsRegistered = true;
+        registerKnownResourceFonts();
+        registerFontsFromDirectory(textfontDir);
+        registerFontsFromDirectory(new File("freej2me_system" + File.separatorChar + "fonts" + File.separatorChar));
+        String systemPath = System.getProperty("freej2me.systemPath");
+        if (systemPath != null && systemPath.length() > 0) {
+            registerFontsFromDirectory(new File(systemPath + File.separatorChar + "customFont" + File.separatorChar));
+            registerFontsFromDirectory(new File(systemPath + File.separatorChar + "fonts" + File.separatorChar));
+        }
+        Mobile.log(Mobile.LOG_INFO, PlatformFont.class.getPackage().getName() + "." + PlatformFont.class.getSimpleName() + ": " + "Font bootstrap complete. Preferred family=" + defaultFontFamily + ", mono=" + monoFontFamily);
+    }
+
+    private static void registerKnownResourceFonts() {
+        String[] fontResources = new String[] {
+            "/fonts/NotoSans-Regular.ttf",
+            "/fonts/NotoSans-Bold.ttf",
+            "/fonts/NotoSans-Italic.ttf",
+            "/fonts/NotoSans-BoldItalic.ttf",
+            "/fonts/NotoSansMono-Regular.ttf",
+            "/fonts/NotoSansMono-Bold.ttf",
+            "/fonts/NotoSansSymbols-Regular.ttf",
+            "/fonts/NotoSansSymbols2-Regular.ttf",
+            "/fonts/NotoEmoji-Regular.ttf",
+            "/fonts/NotoSansThai-Regular.ttf",
+            "/fonts/NotoSansArabic-Regular.ttf",
+            "/fonts/NotoSansDevanagari-Regular.ttf",
+            "/fonts/NotoSansBengali-Regular.ttf",
+            "/fonts/NotoSansTamil-Regular.ttf",
+            "/fonts/NotoSansTelugu-Regular.ttf",
+            "/fonts/NotoSansMyanmar-Regular.ttf",
+            "/fonts/NotoSansJP-Regular.otf",
+            "/fonts/NotoSansSC-Regular.otf",
+            "/fonts/NotoSansTC-Regular.otf",
+            "/fonts/NotoSansKR-Regular.otf",
+            "/fonts/NotoSansCJKjp-Regular.otf",
+            "/fonts/NotoSansCJKsc-Regular.otf",
+            "/fonts/NotoSansCJKtc-Regular.otf",
+            "/fonts/NotoSansCJKkr-Regular.otf"
+        };
+        for (int i = 0; i < fontResources.length; i++) {
+            registerFontResource(fontResources[i]);
+        }
+    }
+
+    private static void registerFontResource(String resource) {
+        InputStream input = null;
+        try {
+            input = PlatformFont.class.getResourceAsStream(resource);
+            if (input == null) {
+                return;
+            }
+            java.awt.Font font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, input);
+            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
+            Mobile.log(Mobile.LOG_INFO, PlatformFont.class.getPackage().getName() + "." + PlatformFont.class.getSimpleName() + ": " + "Registered bundled font: " + resource + " -> " + font.getFamily());
+        }
+        catch (Exception exception) {
+            Mobile.log(Mobile.LOG_WARNING, PlatformFont.class.getPackage().getName() + "." + PlatformFont.class.getSimpleName() + ": " + "Could not register bundled font " + resource + ": " + exception.getMessage());
+        }
+        finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            }
+            catch (Exception ignored) {}
+        }
+    }
+
+    private static void registerFontsFromDirectory(File dir) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) {
+            return;
+        }
+        List<File> fonts = new ArrayList<File>();
+        collectFontFiles(dir, fonts);
+        for (int i = 0; i < fonts.size(); i++) {
+            registerFontFile(fonts.get(i));
+        }
+    }
+
+    private static void collectFontFiles(File dir, List<File> fonts) {
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (int i = 0; i < files.length; i++) {
+            File file = files[i];
+            if (file.isDirectory()) {
+                collectFontFiles(file, fonts);
+                continue;
+            }
+            String name = file.getName().toLowerCase();
+            if (name.endsWith(".ttf") || name.endsWith(".otf") || name.endsWith(".ttc")) {
+                fonts.add(file);
+            }
+        }
+    }
+
+    private static void registerFontFile(File file) {
+        try {
+            java.awt.Font font = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, file);
+            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
+            Mobile.log(Mobile.LOG_INFO, PlatformFont.class.getPackage().getName() + "." + PlatformFont.class.getSimpleName() + ": " + "Registered external font: " + file.getPath() + " -> " + font.getFamily());
+        }
+        catch (Exception exception) {
+            Mobile.log(Mobile.LOG_WARNING, PlatformFont.class.getPackage().getName() + "." + PlatformFont.class.getSimpleName() + ": " + "Could not register external font " + file.getPath() + ": " + exception.getMessage());
+        }
     }
 
     static {
