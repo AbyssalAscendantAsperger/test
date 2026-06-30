@@ -1,0 +1,5 @@
+IMPORTANT NOTICE:
+This FreeJ2ME JAR and its source code are specifically compiled and targeted for Java 8 (bytecode major version 52.0).
+This ensures 100% compatibility with CheerpJ (browser Java runtime) and standard Web Mode bridges.
+
+When building from source, always use `--release 8` (on JDK 9+) or `-source 1.8 -target 1.8` (on JDK 8).
