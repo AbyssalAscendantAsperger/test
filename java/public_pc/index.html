@@ -918,7 +918,7 @@
                   const codeName = mapped ? mapped.code : '';
                   const vkCode = vkMap[codeName] || (keyName.length === 1 ? keyName.toUpperCase().charCodeAt(0) : parseInt(code, 10) || 0);
                   console.log('[KEY-DEBUG][CheerpJ] Gửi postMessage phím tới iframe: key=' + keyName + ', vk=' + vkCode);
-                  win.postMessage({ type: 'cheerpj-key-command', key: keyName, keyCode: vkCode, isDown: isPress }, '*');
+                  win.postMessage({ type: 'cheerpj-key-command', key: keyName, code: codeName, keyCode: vkCode, isDown: isPress, midpCode: Number(code), source: 'public_pc-virtual-gamepad' }, '*');
                   return;
                 }
                 if (currentEngineKind === 'freej2me') {
@@ -1053,10 +1053,75 @@
 
         function startAutoFit() { stopAutoFit(); autofitTimer = setInterval(() => { if (currentFrame && !closing) fitFrame(); }, 400); }
         function stopAutoFit() { if (autofitTimer) { clearInterval(autofitTimer); autofitTimer = null; } }
+
+        // ===== MODE 5 (CheerpJ) FIT FIX =====================================
+        // Khi mobile vào thẳng public_pc/cổng 3002, cách fit iframe cũ của PC lấy
+        // kích thước từ canvas CheerpJ. Canvas này có thể báo backing-store / DPR
+        // hoặc chưa sẵn sàng, khiến game bị co nhỏ nằm lọt bên trong iframe.
+        // Bản public_mobile/cổng 3001 xử lý đúng hơn: lấy kích thước logic gốc từ
+        // URL ?width=W&height=H rồi scale iframe/screen-frame theo đúng tỉ lệ.
+        // Nhánh này chỉ áp dụng cho Mode 5; mode 1/2/3/4 giữ nguyên logic PC.
+        function fitFrameMode5(frame, screenFrame, screenArea) {
+            let cw = 0, ch = 0;
+            try {
+                const qs = (frame.getAttribute('src') || frame.src || '').split('?')[1] || '';
+                const p = new URLSearchParams(qs);
+                cw = parseInt(p.get('width') || '0', 10);
+                ch = parseInt(p.get('height') || '0', 10);
+            } catch (e) {}
+
+            try {
+                const doc = frame.contentWindow && frame.contentWindow.document;
+                const cont = doc && doc.getElementById('contenedor-juego');
+                const canvas = cont && cont.querySelector('canvas');
+                if (canvas) {
+                    const lw = canvas.clientWidth || canvas.width;
+                    const lh = canvas.clientHeight || canvas.height;
+                    if (lw > 0 && lh > 0) {
+                        const wantPortrait = ch >= cw;
+                        const canvasPortrait = lh >= lw;
+                        // Chỉ tin canvas nếu cùng hướng với URL, tránh bị lấy nhầm kích thước lật/ngang.
+                        if (!cw || !ch || wantPortrait === canvasPortrait) { cw = lw; ch = lh; }
+                    }
+                }
+            } catch (e) {}
+
+            if (!cw || !ch) return;
+            if (cw === frame._fitW && ch === frame._fitH && !frame._fitDirty) return;
+            frame._fitW = cw; frame._fitH = ch; frame._fitDirty = false;
+
+            const maxW = screenArea.clientWidth - 8;
+            const maxH = screenArea.clientHeight - 8;
+            if (maxW <= 0 || maxH <= 0) return;
+
+            const scale = Math.min(maxW / cw, maxH / ch);
+            const realW = Math.floor(cw * scale);
+            const realH = Math.floor(ch * scale);
+
+            screenFrame.style.flex = '0 0 auto';
+            screenFrame.style.alignSelf = 'center';
+            screenFrame.style.width = realW + 'px';
+            screenFrame.style.height = realH + 'px';
+
+            frame.style.flex = '0 0 auto';
+            frame.style.width = cw + 'px';
+            frame.style.height = ch + 'px';
+            frame.style.transformOrigin = 'top left';
+            frame.style.transform = 'scale(' + scale + ')';
+        }
+
         function fitFrame() {
             const frame = document.getElementById('emulatorFrame');
             const screenFrame = document.getElementById('screenFrame');
             const screenArea = document.getElementById('screenArea');
+            if (!frame || !screenFrame || !screenArea) return;
+
+            // Mode 5 dùng cách fit giống public_mobile/cổng 3001 để tránh iframe co nhỏ.
+            if (currentEngineKind === 'cheerpj') {
+                try { fitFrameMode5(frame, screenFrame, screenArea); } catch (e) {}
+                return;
+            }
+
             try {
                 const doc = frame.contentWindow && frame.contentWindow.document; if (!doc) return;
                 let canvas = doc.getElementById('canvas');
@@ -1079,6 +1144,7 @@
                 
                 frame.style.width = cw + 'px';
                 frame.style.height = ch + 'px';
+                frame.style.transformOrigin = 'top left';
                 frame.style.transform = 'scale(' + scale + ')';
             } catch(e) {}
         }

@@ -1,19 +1,138 @@
 /**
- * KEYMAP PC -> VIRTUAL NOKIA v7.2 — PC-ONLY (đã tách khỏi mobile)
- * - Layout desktop CỐ ĐỊNH: keypad trái / màn hình phải (KHÔNG @media, KHÔNG dò touch).
- * - Route ALL PC keys -> virtual button [data-code] -> sendKeyRaw().
- * - KHÔNG còn nhánh tương thích mobile (không có "if(!isPC)return", không pointer:fine gate).
- *   Đây là frontend RIÊNG của PC nên luôn coi như đang chạy trên PC.
+ * KEYMAP PC -> VIRTUAL NOKIA v7.4 — PUBLIC_PC HYBRID LAYOUT
+ * ----------------------------------------------------------------------------
+ * Mục tiêu bản này:
+ * - Nếu mở public_pc / cổng 3002 bằng PC: GIỮ NGUYÊN giao diện PC hiện tại
+ *   (bàn phím Nokia nằm bên trái, màn hình game bên phải) và GIỮ NGUYÊN xử lý phím.
+ * - Nếu mở trực tiếp cổng 3002 bằng mobile/tablet: CHỈ đổi layout bàn phím ảo về
+ *   kiểu mobile giống public_mobile/public_mobie (màn hình trên, keypad Nokia dưới).
+ * - Phần xử lý input vẫn là logic public_pc hiện tại: PC key -> virtual button -> sendKeyRaw().
  */
 (function(){
 'use strict';
 if (window.__keymap_v7) return;
 window.__keymap_v7 = true;
-console.log('%c[Keymap v7 PC] init (PC-only, layout cố định)', 'color:#9f9');
 
-/* ---- Desktop left/right CSS — ÁP DỤNG VÔ ĐIỀU KIỆN (không @media) ---- */
+function isMobileClient(){
+  var ua = navigator.userAgent || '';
+  var uaMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Windows Phone|KaiOS|Nokia|Series ?60|SymbianOS|J2ME|MIDP|Profile\//i.test(ua);
+  var coarse = false;
+  try { coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch(e){}
+  var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0 || (navigator.msMaxTouchPoints || 0) > 0;
+  var smallViewport = Math.min(window.innerWidth || 9999, window.innerHeight || 9999) <= 820;
+  // UA mobile là chắc chắn. Nếu bật "desktop site" làm UA mất chữ Mobile, vẫn nhận qua touch + viewport nhỏ/coarse.
+  return !!(uaMobile || (touch && (coarse || smallViewport)));
+}
+
+var MOBILE_LAYOUT_ON_PC_PORT = isMobileClient();
+document.documentElement.classList.toggle('pc-port-mobile-layout', MOBILE_LAYOUT_ON_PC_PORT);
+document.documentElement.classList.toggle('pc-port-desktop-layout', !MOBILE_LAYOUT_ON_PC_PORT);
+console.log('%c[Keymap v7.4 PC] init – layout=' + (MOBILE_LAYOUT_ON_PC_PORT ? 'MOBILE keypad on public_pc:3002' : 'DESKTOP PC'), 'color:#9f9');
+
 var css = document.createElement('style');
-css.textContent = `
+css.id = '__pc_keymap_v73_layout_css';
+if (MOBILE_LAYOUT_ON_PC_PORT) {
+  /*
+   * Mobile truy cập thẳng cổng PC 3002:
+   * Không dùng desktop left/right CSS. Ép lại các điểm quan trọng về layout gốc
+   * của index.html/public_mobile: game-body column, screen-area trên, gamepad dưới.
+   */
+  css.textContent = `
+#gameView .game-body{
+  flex-direction:column!important;
+  align-items:stretch!important;
+}
+#gameView .screen-area{
+  flex:1 1 auto!important;
+  order:0!important;
+  width:100%!important;
+  min-height:0!important;
+}
+#gameView .gamepad, #gameView .gamepad.visible{
+  display:flex!important;
+  order:1!important;
+  flex:0 0 auto!important;
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  border-right:none!important;
+  border-top:1px solid #1a1a22!important;
+  background:#0a0a0f!important;
+  padding:1.5vw 0 2vw!important;
+  box-sizing:border-box!important;
+}
+#gameView .nokia-body{
+  width:100%!important;
+  padding:1vw 0 1.5vw!important;
+  gap:1vw!important;
+}
+#gameView .soft-row{
+  display:flex!important;
+  width:100%!important;
+  justify-content:center!important;
+  align-items:center!important;
+  gap:2vw!important;
+  padding:0!important;
+  flex-wrap:nowrap!important;
+  overflow:visible!important;
+}
+#gameView .soft-key{
+  flex:0 1 auto!important;
+  min-width:12vw!important;
+  max-width:none!important;
+  width:auto!important;
+  height:5.5vw!important;
+  border-radius:3vw!important;
+  font-size:2.4vw!important;
+  letter-spacing:.5vw!important;
+  padding:0!important;
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+#gameView .dpad-wheel-wrap{
+  width:44vw!important;
+  height:44vw!important;
+  max-width:180px!important;
+  max-height:180px!important;
+  margin:1vw 0!important;
+}
+#gameView .dpad-seg .seg-icon{font-size:4vw!important;}
+#gameView .dpad-seg .seg-key{font-size:1.8vw!important;}
+#gameView .dpad-ok .ok-label{font-size:2.8vw!important;}
+#gameView .dpad-ok .wasd-label{font-size:1.6vw!important;}
+#gameView .numpad{
+  width:75vw!important;
+  max-width:280px!important;
+  gap:1.2vw!important;
+  margin:0 auto!important;
+}
+#gameView .num-btn{
+  height:7.5vw!important;
+  border-radius:2vw!important;
+  font-size:3.2vw!important;
+}
+#gameView .nokia-brand{font-size:1.6vw!important;letter-spacing:1vw!important;}
+#gameView .nokia-sep{margin:.5vw 0!important;}
+#pcKeyHint{display:none!important;}
+#padToggle{background:#3a5a2a!important;color:#9fff7c!important;}
+@media (min-width: 700px){
+  #gameView .soft-key{min-width:84px!important;height:38px!important;font-size:16px!important;border-radius:20px!important;letter-spacing:2px!important;}
+  #gameView .dpad-seg .seg-icon{font-size:28px!important;}
+  #gameView .dpad-seg .seg-key{font-size:12px!important;}
+  #gameView .dpad-ok .ok-label{font-size:20px!important;}
+  #gameView .dpad-ok .wasd-label{font-size:11px!important;}
+  #gameView .num-btn{height:52px!important;font-size:22px!important;border-radius:14px!important;}
+  #gameView .nokia-brand{font-size:11px!important;letter-spacing:7px!important;}
+}
+`;
+  console.log('%c[Keymap v7.4 PC] Mobile layout injected for direct 3002 access', 'color:#9cf');
+} else {
+  /* ---- Desktop left/right CSS — chỉ áp dụng cho PC thật ---- */
+  css.textContent = `
 #gameView .game-body{flex-direction:row!important;align-items:stretch}
 #gameView .gamepad, #gameView .gamepad.visible{
   display:flex!important;order:-1;
@@ -56,8 +175,9 @@ css.textContent = `
   display:flex !important;visibility:visible !important;opacity:1 !important;
 }
 `;
+  console.log('%c[Keymap v7.4 PC] Desktop CSS injected', 'color:#9f9');
+}
 document.head.appendChild(css);
-console.log('%c[Keymap v7 PC] CSS desktop injected (vô điều kiện)', 'color:#9f9');
 
 /* ---- PC -> MIDP map ---- */
 var PC_TO_MIDP = {
@@ -112,9 +232,121 @@ function pcHandler(e){
   triggerVirtual(code, isDown);
 }
 
+
+
+/* ---- Mobile-on-3002 touch bridge ----
+ * public_pc gốc đã có bindGamepadButtons(), nhưng bản patch PC cũng có keyboard
+ * bridge riêng cho desktop. Khi mobile vào thẳng 3002, ta chặn nhánh keyboard/iframe
+ * injection và dùng touch/pointer trực tiếp trên các nút [data-code]. Vẫn gọi đúng
+ * sendKeyRaw() của public_pc, nên xử lý game/save/runtime vẫn là PC.
+ */
+var __mobileTouchBridgeInstalled = false;
+var __mobileActiveCodes = new Map();
+function installMobileTouchBridge(){
+  if (!MOBILE_LAYOUT_ON_PC_PORT || __mobileTouchBridgeInstalled) return;
+  __mobileTouchBridgeInstalled = true;
+  function buttonFromEvent(e){
+    var t = e.target;
+    if (!t) return null;
+    if (t.closest) return t.closest('#gamepad [data-code]');
+    while (t && t !== document) {
+      if (t.getAttribute && t.getAttribute('data-code') != null) return t;
+      t = t.parentNode;
+    }
+    return null;
+  }
+  function pressBtn(btn, id, e){
+    if (!btn) return;
+    var code = parseInt(btn.getAttribute('data-code'), 10);
+    if (isNaN(code)) return;
+    var key = String(id || 'touch') + ':' + code;
+    if (__mobileActiveCodes.has(key)) return;
+    __mobileActiveCodes.set(key, { btn: btn, code: code });
+    btn.classList.add('pressed');
+    try { if (typeof sendKeyRaw === 'function') sendKeyRaw(code, true); } catch(err){}
+  }
+  function releaseKey(key){
+    var rec = __mobileActiveCodes.get(key);
+    if (!rec) return;
+    __mobileActiveCodes.delete(key);
+    try { rec.btn.classList.remove('pressed'); } catch(e){}
+    try { if (typeof sendKeyRaw === 'function') sendKeyRaw(rec.code, false); } catch(err){}
+  }
+  function releaseAll(){
+    Array.from(__mobileActiveCodes.keys()).forEach(releaseKey);
+  }
+  function swallow(e){
+    try { e.preventDefault(); } catch(_){}
+    try { e.stopPropagation(); } catch(_){}
+    try { if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } catch(_){}
+  }
+  function onPointerDown(e){
+    var btn = buttonFromEvent(e); if (!btn) return;
+    swallow(e);
+    try { btn.setPointerCapture && btn.setPointerCapture(e.pointerId); } catch(_){}
+    pressBtn(btn, 'p' + e.pointerId, e);
+  }
+  function onPointerUp(e){
+    var had = __mobileActiveCodes.has('p' + e.pointerId + ':' + (buttonFromEvent(e) && buttonFromEvent(e).getAttribute('data-code')));
+    swallow(e);
+    // pointerup có thể xảy ra ngoài nút, nên release theo pointerId bất kể code.
+    Array.from(__mobileActiveCodes.keys()).forEach(function(k){ if (k.indexOf('p' + e.pointerId + ':') === 0) releaseKey(k); });
+  }
+  function onTouchStart(e){
+    var touches = e.changedTouches || [];
+    var used = false;
+    for (var i=0;i<touches.length;i++) {
+      var t = touches[i];
+      var el = document.elementFromPoint(t.clientX, t.clientY);
+      var btn = el && el.closest && el.closest('#gamepad [data-code]');
+      if (btn) { used = true; pressBtn(btn, 't' + t.identifier, e); }
+    }
+    if (used) swallow(e);
+  }
+  function onTouchEnd(e){
+    var touches = e.changedTouches || [];
+    var used = false;
+    for (var i=0;i<touches.length;i++) {
+      var prefix = 't' + touches[i].identifier + ':';
+      Array.from(__mobileActiveCodes.keys()).forEach(function(k){ if (k.indexOf(prefix) === 0) { used = true; releaseKey(k); } });
+    }
+    if (used) swallow(e);
+  }
+  function bind(root){
+    if (!root || root.__pc3002MobileTouchBound) return;
+    root.__pc3002MobileTouchBound = true;
+    if (window.PointerEvent) {
+      root.addEventListener('pointerdown', onPointerDown, true);
+      root.addEventListener('pointerup', onPointerUp, true);
+      root.addEventListener('pointercancel', onPointerUp, true);
+      root.addEventListener('lostpointercapture', onPointerUp, true);
+    } else {
+      root.addEventListener('touchstart', onTouchStart, { capture:true, passive:false });
+      root.addEventListener('touchend', onTouchEnd, { capture:true, passive:false });
+      root.addEventListener('touchcancel', onTouchEnd, { capture:true, passive:false });
+    }
+  }
+  function tryBind(){ bind(document.getElementById('gamepad') || document); }
+  tryBind();
+  setTimeout(tryBind, 250);
+  setTimeout(tryBind, 1000);
+  window.addEventListener('blur', releaseAll, true);
+  document.addEventListener('visibilitychange', function(){ if (document.hidden) releaseAll(); }, true);
+  console.log('%c[Keymap v7.4 PC] mobile touch bridge installed (touch -> public_pc sendKeyRaw)', 'color:#9cf');
+}
+
 /* ---- override setupKeyboardMapping ---- */
 window.setupKeyboardMapping = function(iframe){
-  console.log('%c[Keymap v7 PC] setupKeyboardMapping – VIRTUAL ONLY', 'color:#8f8');
+  console.log('%c[Keymap v7.4 PC] setupKeyboardMapping – layout=' + (MOBILE_LAYOUT_ON_PC_PORT ? 'mobile-touch' : 'desktop-keyboard'), 'color:#8f8');
+
+  // Mobile/tablet vào thẳng cổng 3002: bàn phím ảo là CẢM ỨNG, không inject
+  // keyboard bridge vào iframe. Iframe/runtime và sendKeyRaw vẫn là public_pc.
+  if (MOBILE_LAYOUT_ON_PC_PORT) {
+    try { if (typeof showGamepad === 'function') showGamepad(); } catch(e){}
+    installMobileTouchBridge();
+    return;
+  }
+
   try {
     if (window.keyListener) {
       ['keydown','keyup'].forEach(function(t){
@@ -133,7 +365,7 @@ window.setupKeyboardMapping = function(iframe){
   });
   window.keyListener = pcHandler;
 
-  // PC: luôn hiện keypad (layout cố định, không dò pointer/touch)
+  // public_pc: vẫn luôn hiện keypad. Chỉ layout thay đổi theo thiết bị.
   try { if (typeof showGamepad === 'function') showGamepad(); } catch(e){}
 
   function inject(ifr, tries){
@@ -160,7 +392,7 @@ window.setupKeyboardMapping = function(iframe){
   }
   var fr = iframe || document.getElementById('emulatorFrame');
   if (fr) {
-    if (fr.src && fr.src.includes('cheerpj_run.html')) { console.log('[Keymap v7] CheerpJ Mode 5 detected – allowing direct keyboard hook for Java AWT'); return; }
+    if (fr.src && fr.src.includes('cheerpj_run.html')) { console.log('[Keymap v7.4] CheerpJ Mode 5 detected – allowing direct keyboard hook for Java AWT'); return; }
     try { fr.removeAttribute('sandbox'); } catch(e){}
     fr.addEventListener('load', function(){ setTimeout(function(){inject(fr,0)}, 180); });
     setTimeout(function(){inject(fr,0)}, 350);
@@ -188,5 +420,5 @@ setTimeout(function(){
   } catch(e){}
 }, 600);
 
-console.log('%c[Keymap v7 PC] ready – PC → virtual button (layout desktop cố định)', 'color:#8f8');
+console.log('%c[Keymap v7.4 PC] ready – desktop dùng keyboard, mobile-3002 dùng touch, layout=' + (MOBILE_LAYOUT_ON_PC_PORT ? 'mobile keypad' : 'desktop keypad'), 'color:#8f8');
 })();
