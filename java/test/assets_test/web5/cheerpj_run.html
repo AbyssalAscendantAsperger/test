@@ -4,17 +4,41 @@
   <meta charset="utf-8" />
   <title>TEST MODE5 DEBUG</title>
   <style>
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; display:flex; justify-content:center; align-items:center; }
-    #contenedor-juego { position:relative; overflow:hidden; image-rendering:pixelated; outline:none; }
-    #dbg { position:fixed; left:8px; right:8px; bottom:8px; max-height:30vh; overflow:auto; background:rgba(0,0,0,.78); color:#7CFF7C; font:12px/1.35 monospace; padding:8px; border:1px solid #234; white-space:pre-wrap; z-index:99999; }
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; }
+    #contenedor-juego { position:fixed; inset:0; overflow:hidden; image-rendering:pixelated; outline:none; }
   </style>
   <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const parentOrigin = params.get('parentOrigin') || '*';
+      function safePostToParent(msg) {
+        try {
+          parent.postMessage(msg, parentOrigin === '*' ? '*' : parentOrigin);
+        } catch (e) {}
+      }
+      window.__runnerPostToParent = safePostToParent;
+      window.addEventListener('message', function (ev) {
+        if (parentOrigin !== '*' && ev.origin !== parentOrigin) return;
+        const d = ev && ev.data;
+        if (!d) return;
+        if (d.type === 'parent-ping') {
+          safePostToParent({ type: 'runner-pong', id: d.id, ts: Date.now() });
+          return;
+        }
+        if (d.type === 'cheerpj-key-command') {
+          window.__runnerLastKeyMessage = d;
+        }
+      });
+      setInterval(function () {
+        safePostToParent({ type: 'runner-heartbeat', ts: Date.now() });
+      }, 1000);
+      safePostToParent({ type: 'runner-script-loaded', ts: Date.now(), href: location.href });
+    })();
+
     function relay(level, args) {
       try {
         const msg = args.map(a => typeof a === 'object' ? (a && (a.stack || JSON.stringify(a))) : String(a)).join(' ');
         const line = '[' + level + '] ' + msg;
-        const box = document.getElementById('dbg');
-        if (box) { box.textContent += line + '\n'; box.scrollTop = box.scrollHeight; }
         fetch('/api/browser-log', { method:'POST', headers:{'Content-Type':'text/plain'}, body: line }).catch(()=>{});
       } catch (e) {}
     }
@@ -25,31 +49,15 @@
     window.onerror = (m,u,l,c,e) => relay('FATAL', [m, u, l + ':' + c, e && e.stack || '']);
     window.onunhandledrejection = e => relay('PROMISE', [e.reason && (e.reason.stack || e.reason) || e]);
 
-    async function Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication(lib, app) {
+    function Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication(lib, app) {
       window.__freej2meApp = app;
       console.log('nativeSetApplication ready');
-      return new Promise(function(){});
     }
 
     (function(){
-      let virtualKeyQueue = Promise.resolve();
       const keyState = new Map();
-      function enqueueVirtualKey(midpCode, isDown) {
-        const code = Number(midpCode || 0);
-        if (!code) return false;
-        if (!window.__freej2meApp || typeof window.__freej2meApp.virtualKeyFromJS !== 'function') return false;
-        const prev = keyState.get(code) === true;
-        if (prev === !!isDown) {
-          console.log('ignore duplicate direct midp=' + code + ' down=' + !!isDown);
-          return true;
-        }
-        keyState.set(code, !!isDown);
-        virtualKeyQueue = virtualKeyQueue.then(() => {
-          console.log('direct virtualKeyFromJS', code, !!isDown);
-          return window.__freej2meApp.virtualKeyFromJS(code, !!isDown);
-        }).catch(e => console.warn('virtualKeyFromJS failed', e));
-        return true;
-      }
+      const pendingKeys = [];
+      let keyPumpBusy = false;
       function dispatchSynthetic(d) {
         const type = d.isDown ? 'keydown' : 'keyup';
         const key = d.key || '';
@@ -58,26 +66,54 @@
         const evt = new KeyboardEvent(type, { key, code, bubbles:true, cancelable:true, composed:true });
         [['keyCode', keyCode], ['which', keyCode], ['charCode', 0]].forEach(([k,v]) => { try { Object.defineProperty(evt, k, { get: () => v }); } catch(e) {} });
         const container = document.getElementById('contenedor-juego');
-        const canvas = container && (container.querySelector('canvas') || container.querySelector('[tabindex]'));
-        [canvas, container, document.activeElement, document, window].forEach(t => { try { if (t && t.dispatchEvent) t.dispatchEvent(evt); } catch(e) {} });
+        [container, document.activeElement, document, window].forEach(t => { try { if (t && t.dispatchEvent) t.dispatchEvent(evt); } catch(e) {} });
       }
-      window.addEventListener('message', function(ev) {
-        const d = ev && ev.data;
+      async function flushPendingKeys() {
+        if (keyPumpBusy) return;
+        if (!window.__freej2meApp || typeof window.__freej2meApp.virtualKeyFromJS !== 'function') return;
+        keyPumpBusy = true;
+        try {
+          while (pendingKeys.length) {
+            const d = pendingKeys.shift();
+            if (!d) continue;
+            const code = Number(d.midpCode || 0);
+            if (!code) continue;
+            const prev = keyState.get(code) === true;
+            if (prev === !!d.isDown) continue;
+            try {
+              await window.__freej2meApp.virtualKeyFromJS(code, !!d.isDown);
+              keyState.set(code, !!d.isDown);
+            } catch (e) {
+              pendingKeys.unshift(d);
+              break;
+            }
+          }
+        } finally {
+          keyPumpBusy = false;
+        }
+      }
+      window.__runnerConsumeKeyMessage = function(d) {
         if (!d || d.type !== 'cheerpj-key-command') return;
-        console.log('postMessage key', JSON.stringify(d));
-        if (enqueueVirtualKey(d.midpCode, !!d.isDown)) return;
-        console.warn('Java app not ready -> synthetic fallback');
+        pendingKeys.push(d);
         dispatchSynthetic(d);
-      }, false);
-      window.addEventListener('blur', () => keyState.clear(), true);
-      document.addEventListener('visibilitychange', () => { if (document.hidden) keyState.clear(); }, true);
+        flushPendingKeys();
+      };
+      setInterval(function(){
+        const d = window.__runnerLastKeyMessage;
+        if (d) {
+          window.__runnerLastKeyMessage = null;
+          window.__runnerConsumeKeyMessage(d);
+        }
+        flushPendingKeys();
+      }, 16);
+      window.addEventListener('blur', () => { keyState.clear(); pendingKeys.length = 0; }, true);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) { keyState.clear(); pendingKeys.length = 0; } }, true);
     })();
   </script>
   <script src="./cheerpj/4.3/loader.js"></script>
 </head>
 <body>
   <div id="contenedor-juego" tabindex="0"></div>
-  <div id="dbg"></div>
   <script>
     (async function () {
       const params = new URLSearchParams(location.search);
@@ -85,16 +121,26 @@
       const w = parseInt(params.get('width') || '240', 10);
       const h = parseInt(params.get('height') || '320', 10);
       const file = params.get('file') || '';
-      const appJarUrl = '/app/emu/jar/' + encodeURIComponent(token) + '.jar';
+      const appJarUrl = params.get('jarUrl') || ('/emu/jar/' + encodeURIComponent(token) + '.jar');
       console.log('BOOT', { token, w, h, file, appJarUrl, href: location.href });
 
       const container = document.getElementById('contenedor-juego');
       container.style.width = w + 'px';
       container.style.height = h + 'px';
 
+      window.__runnerPostToParent && window.__runnerPostToParent({ type: 'runner-cheerpj-init-start', ts: Date.now() });
+
       console.log('cheerpjInit start');
-      await cheerpjInit({ natives: { Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication } });
+      await cheerpjInit({
+        natives: { Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication },
+        clipboardMode: 'system',
+        javaProperties: [
+          'java.awt.headless=false'
+        ]
+      });
       console.log('cheerpjInit done');
+
+      window.__runnerPostToParent && window.__runnerPostToParent({ type: 'runner-cheerpj-init-done', ts: Date.now() });
 
       cheerpjCreateDisplay(w, h, container);
       console.log('cheerpjCreateDisplay done');
@@ -106,8 +152,7 @@
           appJarUrl,
           String(w),
           String(h),
-          '1',
-          ''
+          '1'
         );
         console.log('cheerpjRunMain exited cleanly');
       } catch (err) {
