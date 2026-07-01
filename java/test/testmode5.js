@@ -3,8 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const coreApp = express();
-const runnerApp = express();
+const app = express();
 const ROOT = __dirname;
 const SHARED_ROOT = path.resolve(ROOT, '..');
 const JAR_DIR = path.join(SHARED_ROOT, 'jar');
@@ -12,9 +11,10 @@ const PUBLIC_DIR = path.join(ROOT, 'public_test');
 const ASSETS_DIR = path.join(ROOT, 'assets_test');
 
 const CORE_PORT = Number(process.env.PORT || 3015);
-const RUNNER_PORT = Number(process.env.RUNNER_PORT || 3016);
 const CORE_ORIGIN = process.env.CORE_ORIGIN || `http://localhost:${CORE_PORT}`;
-const RUNNER_ORIGIN = process.env.RUNNER_ORIGIN || `http://127.0.0.1:${RUNNER_PORT}`;
+const MODE5_CORE_ARG = Object.prototype.hasOwnProperty.call(process.env, 'MODE5_CORE_ARG')
+  ? String(process.env.MODE5_CORE_ARG || '')
+  : '';
 
 const tokenStore = new Map();
 const TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -22,6 +22,10 @@ const gameRegistry = new Map();
 let lastJarChecksum = '';
 
 function dbg(...args) { console.log('[TESTMODE5]', ...args); }
+function requestOrigin(req) {
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http').toString().split(',')[0];
+  return proto + '://' + req.get('host');
+}
 function issueToken(gameId, extra = {}) {
   const token = crypto.randomBytes(18).toString('hex');
   tokenStore.set(token, { gameId, createdAt: Date.now(), ...extra });
@@ -111,18 +115,13 @@ function walk(dir, base = '') {
 buildGameRegistry();
 lastJarChecksum = getJarChecksum();
 
-coreApp.use((req, res, next) => {
-  dbg('CORE REQ', req.method, req.originalUrl, 'range=' + (req.headers.range || 'none'));
-  next();
-});
-
-runnerApp.use((req, res, next) => {
-  dbg('RUNNER REQ', req.method, req.originalUrl, 'range=' + (req.headers.range || 'none'));
+app.use((req, res, next) => {
+  dbg('REQ', req.method, req.originalUrl, 'range=' + (req.headers.range || 'none'));
   res.setHeader('Origin-Agent-Cluster', '?1');
   next();
 });
 
-runnerApp.use('/web5', (req, res, next) => {
+app.use('/web5', (req, res, next) => {
   const rel = decodeURIComponent((req.path || '').split('?')[0]);
   const full = path.join(ASSETS_DIR, 'web5', rel);
   try {
@@ -138,14 +137,19 @@ runnerApp.use('/web5', (req, res, next) => {
   } catch (e) {
     dbg('WEB5 inspect error', rel, e.message);
   }
+  if (rel === '/app/freej2me.jar' || rel === '/app/freej2me-sdl.jar') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
   res.on('finish', () => dbg('WEB5 RES', req.method, req.originalUrl, 'status=' + res.statusCode));
   next();
 });
 
-coreApp.use(express.static(PUBLIC_DIR));
-runnerApp.use('/web5', express.static(path.join(ASSETS_DIR, 'web5'), { acceptRanges: true }));
+app.use('/web5', express.static(path.join(ASSETS_DIR, 'web5'), { acceptRanges: true }));
+app.use(express.static(PUBLIC_DIR));
 
-coreApp.get('/api/jars', (req, res) => {
+app.get('/api/jars', (req, res) => {
   rebuildGameRegistryIfNeeded();
   const games = [...gameRegistry.values()].map(g => ({
     id: g.id,
@@ -158,54 +162,59 @@ coreApp.get('/api/jars', (req, res) => {
   res.json({ games, devs: [], profiles: [] });
 });
 
-coreApp.get('/api/launch', (req, res) => {
+app.get('/api/launch', (req, res) => {
   rebuildGameRegistryIfNeeded();
   const id = String(req.query.id || '');
   const game = gameRegistry.get(id);
-  if (!game) {
-    return res.status(400).json({ error: 'Game không hợp lệ' });
-  }
+  if (!game) return res.status(400).json({ error: 'Game không hợp lệ' });
+
   const token = issueToken(id, { jarPath: game.fullPath });
   const r = game.resolution;
-  const jarUrl = RUNNER_ORIGIN + '/emu/jar/' + encodeURIComponent(token) + '.jar';
+  const origin = requestOrigin(req);
+  const appJarPath = '/app/emu/jar/' + encodeURIComponent(token) + '.jar';
+  const cfgParam = MODE5_CORE_ARG ? '&cfg=' + encodeURIComponent(MODE5_CORE_ARG) : '';
   const runnerPath =
     '/web5/cheerpj_run.html?token=' + encodeURIComponent(token) +
-    '&jarUrl=' + encodeURIComponent(jarUrl) +
+    '&jarUrl=' + encodeURIComponent(appJarPath) +
     '&width=' + encodeURIComponent(r.width) +
     '&height=' + encodeURIComponent(r.height) +
+    cfgParam +
     '&debug=1' +
-    '&parentOrigin=' + encodeURIComponent(CORE_ORIGIN) +
+    '&parentOrigin=' + encodeURIComponent(origin) +
     '&file=' + encodeURIComponent(game.file);
-  const url = RUNNER_ORIGIN + runnerPath;
-  dbg('LAUNCH runner game=' + game.file + ' id=' + id + ' res=' + r.width + 'x' + r.height);
-  dbg('LAUNCH runner url=' + url);
+
+  dbg('LAUNCH SAME-PORT game=' + game.file + ' id=' + id + ' res=' + r.width + 'x' + r.height);
+  dbg('LAUNCH SAME-PORT appJarPath=' + appJarPath);
+  dbg('LAUNCH SAME-PORT cfg=' + (MODE5_CORE_ARG || '<none>'));
+  dbg('LAUNCH SAME-PORT url=' + runnerPath);
+
   res.json({
     success: true,
     engine: 'cheerpj',
-    mode: 'mode5',
-    url,
-    runnerOrigin: RUNNER_ORIGIN,
+    mode: 'mode5-same-port',
+    url: runnerPath,
+    runnerOrigin: origin,
     resolution: r,
     file: game.file
   });
 });
 
-coreApp.get('/api/debug/files', (req, res) => {
+app.get('/api/debug/files', (req, res) => {
   res.json({
     cwd: process.cwd(),
     root: ROOT,
-    coreOrigin: CORE_ORIGIN,
-    runnerOrigin: RUNNER_ORIGIN,
+    origin: requestOrigin(req),
     jars: [...gameRegistry.values()],
     web5Files: fs.existsSync(path.join(ASSETS_DIR, 'web5')) ? walk(path.join(ASSETS_DIR, 'web5')) : []
   });
 });
 
-coreApp.get('/', (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+app.get('/emu/jar', (req, res) => {
+  // CheerpJ may probe the directory with range=0-0. Keep it harmless.
+  res.status(404).send('');
 });
 
-runnerApp.get('/emu/jar/:token', (req, res) => {
+app.get('/emu/jar/:token', (req, res) => {
   const rawToken = String(req.params.token || '');
   const token = rawToken.replace(/\.(jar|jad)$/i, '');
   const info = verifyToken(token);
@@ -228,24 +237,24 @@ runnerApp.get('/emu/jar/:token', (req, res) => {
   res.sendFile(jarPath);
 });
 
-runnerApp.post('/api/browser-log', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
+app.post('/api/browser-log', express.text({ type: '*/*', limit: '1mb' }), (req, res) => {
   console.log('[RUNNER-BROWSER]', String(req.body || '').slice(0, 5000));
   res.json({ ok: true });
 });
 
-runnerApp.get('/health', (req, res) => {
-  res.json({ ok: true, role: 'runner', ts: Date.now() });
+app.get('/health', (req, res) => {
+  res.json({ ok: true, role: 'same-port', ts: Date.now() });
 });
 
-coreApp.listen(CORE_PORT, '0.0.0.0', () => {
-  dbg('Core UI started at ' + CORE_ORIGIN);
+app.get('/', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
+app.listen(CORE_PORT, '0.0.0.0', () => {
+  dbg('SAME-PORT UI+Runner started at ' + CORE_ORIGIN);
   dbg('ROOT=' + ROOT);
   dbg('JAR_DIR=' + JAR_DIR);
   dbg('PUBLIC_DIR=' + PUBLIC_DIR);
   dbg('ASSETS_DIR=' + ASSETS_DIR);
-  dbg('Mode duy nhất: mode5');
-});
-
-runnerApp.listen(RUNNER_PORT, '0.0.0.0', () => {
-  dbg('Runner started at ' + RUNNER_ORIGIN);
+  dbg('Mode duy nhất: mode5 same-port 3015');
 });

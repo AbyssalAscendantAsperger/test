@@ -537,7 +537,17 @@ public class PlatformPlayer implements Player
 		
 		if(getState() == Player.UNREALIZED) { realize(); }
 		
-		if(getState() == Player.REALIZED) { player.prefetch(); }
+		if(getState() == Player.REALIZED)
+		{
+			player.prefetch();
+			if(getState() == Player.PREFETCHED && controls != null && controls[0] instanceof volumeControl)
+			{
+				// Apply the safe default gain immediately after scarce audio resources
+				// are acquired. Without this, Java Clip/Synth starts at host 0dB
+				// until a game explicitly calls VolumeControl.setLevel().
+				((volumeControl)controls[0]).setLevel(100);
+			}
+		}
 	}
 
 	public void realize() 
@@ -652,7 +662,12 @@ public class PlatformPlayer implements Player
 
 	private static float applySafeGain(float dB)
 	{
-		return Mobile.audioSafe ? dB + Mobile.audioGainDb : dB;
+		if(!Mobile.audioSafe) { return dB; }
+		float safe = dB + Mobile.audioGainDb;
+		// Never allow the safety path to boost above the source level or 0dB.
+		if(safe > dB) { safe = dB; }
+		if(safe > 0.0f) { safe = 0.0f; }
+		return safe;
 	}
 
 	private static int applySafeMidiVolume(int value)
@@ -1909,7 +1924,7 @@ public class PlatformPlayer implements Player
 	{
 		private boolean muted = false;
 		private audioplayer player; // Reference to the player this is linked to, or else we won't be able to apply changes
-		private byte volume = 100;
+		private byte volume = -1;
 		private int panValue = 64; // Center panning
 
 		// MIDI Volume Sysex message
@@ -2023,7 +2038,7 @@ public class PlatformPlayer implements Player
 				{
 					for (int channel = 0; channel < midiChannels.length; channel++) 
 					{
-						midiChannels[channel].controlChange(7, panning);
+						midiChannels[channel].controlChange(10, panning);
 						LockSupport.parkNanos(10000);
 					}
 				}

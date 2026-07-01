@@ -1477,11 +1477,11 @@ public class Mobile {
             sound = true;
         }
         audioSafe = !Mobile.config.sysSettings.get("audioSafe").equals("off");
-        audioGainDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioGainDb"), -9.0f, -48.0f, 0.0f);
+        audioGainDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioGainDb"), -18.0f, -48.0f, 0.0f);
         audioSampleRate = Mobile.parseIntSetting(Mobile.config.sysSettings.get("audioSampleRate"), 44100, 8000, 96000);
-        audioMaxSfx = Mobile.parseIntSetting(Mobile.config.sysSettings.get("audioMaxSfx"), 4, 1, 32);
-        audioToneVolumeScale = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioToneVolumeScale"), 70.0f, 0.0f, 100.0f) / 100.0f;
-        audioSmafPcmGainMaxDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioSmafPcmGainMaxDb"), -6.0f, -48.0f, 0.0f);
+        audioMaxSfx = Mobile.parseIntSetting(Mobile.config.sysSettings.get("audioMaxSfx"), 3, 1, 32);
+        audioToneVolumeScale = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioToneVolumeScale"), 45.0f, 0.0f, 100.0f) / 100.0f;
+        audioSmafPcmGainMaxDb = Mobile.parseFloatSetting(Mobile.config.sysSettings.get("audioSmafPcmGainMaxDb"), -14.0f, -48.0f, 0.0f);
         if ((string2 = Mobile.config.sysSettings.get("soundfont")).equals("Custom") && !useCustomMidi) {
             useCustomMidi = true;
             Manager.changeCustomMidi();
@@ -1761,11 +1761,11 @@ public class Mobile {
         keyArray = new String[]{"Up", "Down", "Left", "Right", "9", "7", "0", "Fire", "RightSoft", "LeftSoft", "1", "3", "*", "#", "2", "4", "6", "8", "5", "CLR", "Fast Forward", "Screenshot", "MIDlet Pause/Resume"};
         sound = true;
         audioSafe = true;
-        audioGainDb = -9.0f;
+        audioGainDb = -18.0f;
         audioSampleRate = 44100;
-        audioMaxSfx = 4;
-        audioToneVolumeScale = 0.70f;
-        audioSmafPcmGainMaxDb = -6.0f;
+        audioMaxSfx = 3;
+        audioToneVolumeScale = 0.45f;
+        audioSmafPcmGainMaxDb = -14.0f;
         activeSfxCount = 0;
         limitFPS = 0;
         unlockFramerateHack = 0;

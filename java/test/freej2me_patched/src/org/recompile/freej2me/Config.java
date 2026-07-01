@@ -161,11 +161,11 @@ public class Config
 				sysSettings.put("dumpGraphicsObjects", "off");
 				sysSettings.put("sound", "on");
 				sysSettings.put("audioSafe", "on");
-				sysSettings.put("audioGainDb", "-9");
+				sysSettings.put("audioGainDb", "-18");
 				sysSettings.put("audioSampleRate", "44100");
-				sysSettings.put("audioMaxSfx", "4");
-				sysSettings.put("audioToneVolumeScale", "70");
-				sysSettings.put("audioSmafPcmGainMaxDb", "-6");
+				sysSettings.put("audioMaxSfx", "3");
+				sysSettings.put("audioToneVolumeScale", "45");
+				sysSettings.put("audioSmafPcmGainMaxDb", "-14");
 				sysSettings.put("soundfont", "Default");
 				sysSettings.put("textfont", "Default");
 				// AWT Inputs
@@ -258,11 +258,11 @@ public class Config
 			if(!sysSettings.containsKey("textfont")) { sysSettings.put("textfont", "Default"); }
 			if(!sysSettings.containsKey("sound")) { sysSettings.put("sound", "on"); }
 			if(!sysSettings.containsKey("audioSafe")) { sysSettings.put("audioSafe", "on"); }
-			if(!sysSettings.containsKey("audioGainDb")) { sysSettings.put("audioGainDb", "-9"); }
+			if(!sysSettings.containsKey("audioGainDb")) { sysSettings.put("audioGainDb", "-18"); }
 			if(!sysSettings.containsKey("audioSampleRate")) { sysSettings.put("audioSampleRate", "44100"); }
-			if(!sysSettings.containsKey("audioMaxSfx")) { sysSettings.put("audioMaxSfx", "4"); }
-			if(!sysSettings.containsKey("audioToneVolumeScale")) { sysSettings.put("audioToneVolumeScale", "70"); }
-			if(!sysSettings.containsKey("audioSmafPcmGainMaxDb")) { sysSettings.put("audioSmafPcmGainMaxDb", "-6"); }
+			if(!sysSettings.containsKey("audioMaxSfx")) { sysSettings.put("audioMaxSfx", "3"); }
+			if(!sysSettings.containsKey("audioToneVolumeScale")) { sysSettings.put("audioToneVolumeScale", "45"); }
+			if(!sysSettings.containsKey("audioSmafPcmGainMaxDb")) { sysSettings.put("audioSmafPcmGainMaxDb", "-14"); }
 			// AWT Inputs
 			if(!sysSettings.containsKey("input_LeftSoft"))    { sysSettings.put("input_LeftSoft", ""     + inputKeycodes[0]); }
 			if(!sysSettings.containsKey("input_RightSoft"))   { sysSettings.put("input_RightSoft", ""    + inputKeycodes[1]); }

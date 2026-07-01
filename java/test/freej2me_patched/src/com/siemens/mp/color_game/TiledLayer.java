@@ -94,22 +94,26 @@ public class TiledLayer extends Layer
 		return -animatedTileCount;
 	}
 
+	private int animatedTileToListIndex(int animatedTileIndex)
+	{
+		// MIDP returns animated tile handles as -1, -2, ... while ArrayList is
+		// zero-based. The previous code used -animatedTileIndex directly, so
+		// handle -1 mapped to list index 1 and threw IndexOutOfBoundsException.
+		if (animatedTileIndex >= 0) { throw new IndexOutOfBoundsException(); }
+		int listIndex = -animatedTileIndex - 1;
+		if (animatedTiles == null || listIndex < 0 || listIndex >= animatedTileCount) { throw new IndexOutOfBoundsException(); }
+		return listIndex;
+	}
+
 	public void setAnimatedTile(int animatedTileIndex, int staticTileIndex) 
 	{
 		if (staticTileIndex < 0 || staticTileIndex >= numberOfTiles) { throw new IndexOutOfBoundsException(); }
-		
-		animatedTileIndex = -animatedTileIndex;
-		if (animatedTiles == null || animatedTileIndex <= 0 || animatedTileIndex >= animatedTileCount) { throw new IndexOutOfBoundsException(); }
-
-		animatedTiles.set(animatedTileIndex, staticTileIndex);
+		animatedTiles.set(animatedTileToListIndex(animatedTileIndex), staticTileIndex);
 	}
 
 	public int getAnimatedTile(int animatedTileIndex) 
 	{
-		animatedTileIndex = -animatedTileIndex;
-		if (animatedTiles == null || animatedTileIndex <= 0 || animatedTileIndex >= animatedTileCount) { throw new IndexOutOfBoundsException(); }
-
-		return animatedTiles.get(animatedTileIndex);
+		return animatedTiles.get(animatedTileToListIndex(animatedTileIndex));
 	}
 
 	public void setCell(int col, int row, int tileIndex) 
@@ -117,7 +121,7 @@ public class TiledLayer extends Layer
 		if (col < 0 || col >= this.cols || row < 0 || row >= this.rows) { throw new IndexOutOfBoundsException(); }
 
 		if (tileIndex > 0) { if (tileIndex >= numberOfTiles) { throw new IndexOutOfBoundsException(); } } 
-		else if (tileIndex < 0) { if (animatedTiles == null || (-tileIndex) >= animatedTileCount) { throw new IndexOutOfBoundsException(); } }
+		else if (tileIndex < 0) { animatedTileToListIndex(tileIndex); }
 
 		tiles[row][col] = tileIndex;
 	}
@@ -135,7 +139,7 @@ public class TiledLayer extends Layer
 		if (col < 0 || col >= this.cols || row < 0 || row >= this.rows || col + numCols > this.cols || row + numRows > this.rows)  { throw new IndexOutOfBoundsException(); }
 
 		if (tileIndex > 0) { if (tileIndex >= numberOfTiles) { throw new IndexOutOfBoundsException(); } } 
-		else if (tileIndex < 0) { if (animatedTiles == null || (-tileIndex) >= animatedTileCount) { throw new IndexOutOfBoundsException(); } }
+		else if (tileIndex < 0) { animatedTileToListIndex(tileIndex); }
 
 		for (int rowCount = row; rowCount < row + numRows; rowCount++) { Arrays.fill(tiles[rowCount], col, col + numCols, tileIndex); }
 	}
@@ -220,8 +224,9 @@ public class TiledLayer extends Layer
 			 * animated tiles.
 			 */
 			for (int row = 0; row < tiles.length; row++) { Arrays.fill(tiles[row], 0); }
-			animatedTiles.clear();
+			if (animatedTiles != null) { animatedTiles.clear(); }
 			animatedTiles = null;
+			animatedTileCount = 0;
 		}
 	
 		// Now we can start actually adding tiles to the tile matrix.
