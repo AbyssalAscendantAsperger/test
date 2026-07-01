@@ -135,18 +135,23 @@ public class MIDletLoader extends URLClassLoader
 		super(new URL[] {url} );
 		resetLoaderState();
 
+		Mobile.dlog("MIDletLoader", "Constructor called. URL=", url.toString());
+
 		try 
 		{
 			String jarName = new File(url.getFile()).getName().replace('.', '_');
 			suitename = jarName;
+			Mobile.dlog("MIDletLoader", "Suitename resolved to: ", jarName);
 			File file = new File(url.toURI());
             jarFile = new JarFile(file);
 			loadJarEntries();
 			baseUrl = url;
+			Mobile.dlog("MIDletLoader", "Jar entries loaded: ", jarEntries.size());
 		} 
 		catch (Exception e)
 		{
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Failed to parse jar:" + e.getMessage());
+			Mobile.dlog("MIDletLoader", "FAILED to parse jar: ", e.getMessage());
 			e.printStackTrace();
 		}
 
@@ -338,17 +343,19 @@ public class MIDletLoader extends URLClassLoader
 	public void start() throws MIDletStateChangeException
 	{
 		boolean hasMultipleMidlets = className[1] != null;
+		Mobile.dlog("MIDletLoader", "start() called. hasMultipleMidlets=", hasMultipleMidlets, " | MIDlet[0]=", className[0]);
 
 		if(hasMultipleMidlets && shouldAutoSelectMIDlet())
 		{
 			Mobile.log(Mobile.LOG_INFO, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Multiple MIDlets detected. Web auto-select/fallback is enabled.");
+			Mobile.dlog("MIDletLoader", "Auto-select mode enabled for web");
 
 			for(int i = 0; i < className.length; i++)
 			{
 				if(className[i] == null) { continue; }
 
-				Mobile.log(Mobile.LOG_INFO, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Auto trying MIDlet #" + (i+1) + ": " + name[i] + " | Main Class: " + className[i]);
-				if(tryStartMIDlet(i)) { return; }
+				Mobile.dlog("MIDletLoader", "Auto trying MIDlet #", (i+1), ": ", name[i], " class=", className[i]);
+				if(tryStartMIDlet(i)) { Mobile.dlog("MIDletLoader", "MIDlet #", (i+1), " started successfully"); return; }
 			}
 
 			Mobile.log(Mobile.LOG_WARNING, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "All auto MIDlet attempts failed. Falling back to manual selector.");
@@ -358,6 +365,7 @@ public class MIDletLoader extends URLClassLoader
 
 		if(hasMultipleMidlets) // More than one element, bring up the selection menu
 		{
+			Mobile.dlog("MIDletLoader", "Showing MIDlet selector menu");
 			showMIDletSelector();
 		}
 		else
@@ -369,6 +377,7 @@ public class MIDletLoader extends URLClassLoader
 		if(!tryStartMIDlet(selectedMidlet))
 		{
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "No MIDlet could be started.");
+			Mobile.dlog("MIDletLoader", "ERROR: No MIDlet could be started from index ", selectedMidlet);
 		}
 	}
 
@@ -401,36 +410,45 @@ public class MIDletLoader extends URLClassLoader
 	private boolean tryStartMIDlet(int index)
 	{
 		Method start = null;
+		Mobile.dlog("MIDletLoader", "tryStartMIDlet called with index=", index, " className=", className[index]);
 
 		try
 		{
 			if(index < 0 || index >= className.length || className[index] == null)
 			{
 				Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Invalid MIDlet index: " + index);
+				Mobile.dlog("MIDletLoader", "ERROR: Invalid MIDlet index ", index);
 				return false;
 			}
 
 			selectedMidlet = (byte) index;
 			MIDletSelected = true;
+			Mobile.dlog("MIDletLoader", "Loading class: ", className[selectedMidlet]);
 			mainClass = loadClass(className[selectedMidlet]);
 
 			if(mainClass == null)
 			{
+				Mobile.dlog("MIDletLoader", "ERROR: mainClass is null after loadClass for: ", className[selectedMidlet]);
 				throw new ClassNotFoundException(className[selectedMidlet]);
 			}
+			Mobile.dlog("MIDletLoader", "Class loaded successfully: ", mainClass.getName(), " isDoJa=", Mobile.isDoJa);
 
 			Constructor constructor = mainClass.getConstructor();
 			constructor.setAccessible(true);
 
 			if(!Mobile.isDoJa) 
 			{
+				Mobile.dlog("MIDletLoader", "Initializing MIDlet with properties. Count=", properties.size());
 				MIDlet.initAppProperties(properties);
 				midletInst = (MIDlet)constructor.newInstance();
+				Mobile.dlog("MIDletLoader", "MIDlet instance created: ", midletInst.getClass().getName());
 			}
 			else 
 			{
+				Mobile.dlog("MIDletLoader", "Initializing IApplication with properties. Count=", properties.size());
 				IApplication.initAppProperties(properties);
 				IAppliInst = (IApplication) constructor.newInstance();
+				Mobile.dlog("MIDletLoader", "IApplication instance created: ", IAppliInst.getClass().getName());
 			}
 
 			Class<?> searchClass = mainClass;
@@ -438,17 +456,24 @@ public class MIDletLoader extends URLClassLoader
 			{
 				try
 				{
+					String methodName = Mobile.isDoJa ? "start" : "startApp";
+					Mobile.dlog("MIDletLoader", "Searching for method '", methodName, "' in class: ", searchClass.getName());
 					start = Mobile.isDoJa ? searchClass.getDeclaredMethod("start") : searchClass.getDeclaredMethod("startApp");
 					start.setAccessible(true);
+					Mobile.dlog("MIDletLoader", "Found method '", (Mobile.isDoJa ? "start" : "startApp"), "' in ", searchClass.getName());
 				}
 				catch (NoSuchMethodException e)
 				{
+					Class<?> prevClass = searchClass;
 					searchClass = searchClass.getSuperclass();
+					Mobile.dlog("MIDletLoader", "Method not found in ", prevClass.getName(), " moving up to superclass: ", (searchClass != null ? searchClass.getName() : "null"));
 					if (searchClass == null || searchClass == MIDlet.class || searchClass == IApplication.class) { throw e; }
 				}
 			}
 
+			Mobile.dlog("MIDletLoader", "Invoking startApp on: ", (Mobile.isDoJa ? IAppliInst : midletInst).getClass().getName());
 			start.invoke(Mobile.isDoJa ? IAppliInst : midletInst);
+			Mobile.dlog("MIDletLoader", "startApp invoked successfully");
 			return true;
 		}
 		catch (Throwable e)
@@ -456,6 +481,7 @@ public class MIDletLoader extends URLClassLoader
 			String midletName = (index >= 0 && index < name.length) ? name[index] : null;
 			String midletClass = (index >= 0 && index < className.length) ? className[index] : null;
 			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Failed to start MIDlet #" + (index+1) + " name=" + midletName + " class=" + midletClass + " reason=" + e);
+			Mobile.dlog("MIDletLoader", "FAILED to start MIDlet #", (index+1), " name=", midletName, " class=", midletClass, " reason=", e.getMessage());
 			try { e.printStackTrace(); } catch (Throwable ignored) { }
 			return false;
 		}
@@ -1046,15 +1072,23 @@ public class MIDletLoader extends URLClassLoader
 
 		try
 		{
-			Mobile.log(Mobile.LOG_DEBUG, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Instrumenting Class "+name);
+			Mobile.dlog("MIDletLoader", "Instrumenting Class: ", name);
 			resource = name.replace(".", "/") + ".class";
 			stream = super.getResourceAsStream(resource);
+			if (stream == null) {
+				Mobile.dlog("MIDletLoader", "WARNING: No bytecode stream found for class: ", name, " resource path: ", resource);
+			} else {
+				Mobile.dlog("MIDletLoader", "Got bytecode stream for: ", name);
+			}
 			code = instrument(stream);
+			Mobile.dlog("MIDletLoader", "Instrumented ", name, " bytecode size: ", code.length);
 			return defineClass(name.replace("/", "."), code, 0, code.length);
 		}
 		catch (Exception e)
 		{
-			Mobile.log(Mobile.LOG_DEBUG, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Error adapting/loading class " + name + ": " + e.toString());
+			Mobile.log(Mobile.LOG_ERROR, MIDletLoader.class.getPackage().getName() + "." + MIDletLoader.class.getSimpleName() + ": " + "Error adapting/loading class " + name + ": " + e.toString());
+			Mobile.dlog("MIDletLoader", "FAILED to instrument/load class ", name, " error: ", e.toString());
+			e.printStackTrace();
 			throw new ClassNotFoundException(name, e);
 		}
 

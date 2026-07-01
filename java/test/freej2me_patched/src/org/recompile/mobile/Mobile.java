@@ -110,13 +110,46 @@ public class Mobile {
     public static int limitFPS;
     public static byte unlockFramerateHack;
     public static boolean isFastForwarding;
-    public static boolean isPaused;
-    public static volatile float fastForwardMultiplier;
-    public static byte libretroRestartRequested;
-    public static byte libretroEncodingRequested;
-    public static boolean isAAEnabled;
-    public static int vibrationDuration;
-    public static int vibrationStrength;
+	public static boolean isPaused;
+	public static volatile float fastForwardMultiplier;
+	public static byte libretroRestartRequested;
+	public static byte libretroEncodingRequested;
+	public static boolean isAAEnabled;
+	public static int vibrationDuration;
+	public static int vibrationStrength;
+
+	/* ============================================================
+	 *  Debug Mode Flag — controlled by --debugmodefreej2me
+	 *  When false, ALL dlog() calls become no-ops (zero overhead).
+	 *  When true, dlog() logs to both console and the file logger.
+	 * ============================================================ */
+	public static volatile boolean debugMode = false;
+
+	/**
+	 * Conditional debug log — only executes when debugMode is true.
+	 * Use this everywhere you want diagnostic output that can be
+	 * toggled on/off with the --debugmodefreej2me flag.
+	 *
+	 * @param tag    short tag identifying the subsystem (e.g. "MIDletLoader", "Canvas")
+	 * @param msg    the debug message
+	 */
+	public static final void dlog(String tag, String msg) {
+		if (!debugMode) return;
+		log(LOG_DEBUG, "[DEBUG:" + tag + "] " + msg);
+	}
+
+	/**
+	 * Conditional debug log with format-like concatenation (avoids building
+	 * the string when debugMode is false).
+	 */
+	public static final void dlog(String tag, Object... parts) {
+		if (!debugMode) return;
+		StringBuilder sb = new StringBuilder("[DEBUG:").append(tag).append("] ");
+		for (Object p : parts) {
+			sb.append(p);
+		}
+		log(LOG_DEBUG, sb.toString());
+	}
     public static final int KDDI_UP = 1;
     public static final int KDDI_DOWN = 6;
     public static final int KDDI_LEFT = 2;

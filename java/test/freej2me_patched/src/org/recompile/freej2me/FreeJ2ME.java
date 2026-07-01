@@ -70,6 +70,12 @@ public class FreeJ2ME {
                 webMode = true;
                 continue;
             }
+            if (stringArray[i].equals("--debugmodefreej2me")) {
+                org.recompile.mobile.Mobile.debugMode = true;
+                org.recompile.mobile.Mobile.dlog("Boot", "Debug mode ENABLED via --debugmodefreej2me flag");
+                System.out.println("[DEBUG-MODE] --debugmodefreej2me activated. All dlog() calls will produce output.");
+                continue;
+            }
             arrayList.add(stringArray[i]);
         }
         stringArray = arrayList.toArray(new String[arrayList.size()]);

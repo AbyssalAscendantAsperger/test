@@ -141,6 +141,7 @@ com.vodafone.v10.graphics.j3d.Graphics3D {
     }
 
     public void reset(int n, int n2, int n3, int n4) {
+        Mobile.dlog("Graphics", "reset: clip=[", n, ",", n2, ",", n3, "x", n4, "] translateX=", this.translateX, " translateY=", this.translateY);
         if (this.firstReset) {
             this.resetTransX = this.getTranslateX();
             this.resetTransY = this.getTranslateY();
@@ -252,10 +253,12 @@ com.vodafone.v10.graphics.j3d.Graphics3D {
         try {
             n = this.AnchorX(n, image.getWidth(), n3);
             n2 = this.AnchorY(n2, image.getHeight(), n3);
+            Mobile.dlog("Graphics", "drawImage: image size=", image.getWidth(), "x", image.getHeight(), " at (", n, ",", n2, ") anchor=", n3);
             this.drawRGB(image.getDataBuffer(), 0, image.getWidth(), n, n2, image.getWidth(), image.getHeight(), true);
         }
         catch (Exception exception) {
             Mobile.log((byte)4, PlatformGraphics.class.getPackage().getName() + "." + PlatformGraphics.class.getSimpleName() + ": drawImage :" + exception.getMessage());
+            Mobile.dlog("Graphics", "drawImage FAILED: ", exception.getMessage());
         }
     }
 

@@ -155,6 +155,7 @@ public class MobilePlatform {
         if (appTerminated) {
             return;
         }
+        Mobile.dlog("MobilePlatform", "keyPressed: keyCode=", n);
         if (!MIDletLoader.MIDletSelected) {
             MIDletLoader.keyPress(Mobile.getGameAction(n));
         } else if (!Mobile.isPaused) {
@@ -162,6 +163,7 @@ public class MobilePlatform {
             MobilePlatform.updateVodafoneKeyState(Mobile.getCanvasAction(n), true);
             MobilePlatform.updateDoJaKeyState(Mobile.getCanvasAction(n), true);
             if (!Mobile.isDoJa && Mobile.getDisplay() != null && (displayable = Mobile.getDisplay().getCurrent()) != null) {
+                Mobile.dlog("MobilePlatform", "keyPressed: posting input event to displayable=", displayable.getClass().getName());
                 Mobile.getDisplay().postInputEvent(new Runnable(){
 
                     @Override

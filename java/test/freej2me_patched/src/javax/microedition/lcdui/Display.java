@@ -267,13 +267,14 @@ public class Display
 
 	public void setCurrent(final Displayable next)
 	{
+		Mobile.dlog("Display", "setCurrent called with next=", (next != null ? next.getClass().getName() : "null"), " current=", (current != null ? current.getClass().getName() : "null"));
 		setCurrentRequest.set(new Runnable()
 		{
 			@Override
 			public void run() 
 			{
 				Displayable prev = current;
-				if (next == null || current == next) { return; }
+				if (next == null || current == next) { Mobile.dlog("Display", "setCurrent early return: next=", (next == null ? "null" : next.getClass().getName())); return; }
 
 				// Make the new displayable effective before showNotify(). Many games
 				// start their render thread from showNotify() and immediately call
@@ -281,14 +282,16 @@ public class Display
 				// returns false and the first frame is dropped, causing white screens.
 				try 
 				{
+					Mobile.dlog("Display", "setCurrent: setting current to ", next.getClass().getName(), " prev=", (prev != null ? prev.getClass().getName() : "null"));
 					if(next instanceof Alert) { ((Alert) next).setNextScreen(current); }
 					current = next;
-					if (prev instanceof Canvas) { ((Canvas) prev).hideNotify(); }
-					if (next instanceof Canvas) { ((Canvas) next).showNotify(); }
+					if (prev instanceof Canvas) { Mobile.dlog("Display", "hideNotify on ", prev.getClass().getName()); ((Canvas) prev).hideNotify(); }
+					if (next instanceof Canvas) { Mobile.dlog("Display", "showNotify on ", next.getClass().getName()); ((Canvas) next).showNotify(); }
 				}
 				catch (Exception e)
 				{
 					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent displayable/showNotify block failed: " + e.getMessage());
+					Mobile.dlog("Display", "EXCEPTION in showNotify/hideNotify: ", e.getMessage());
 					e.printStackTrace();
 				}
 
@@ -299,6 +302,7 @@ public class Display
 					if(current instanceof Canvas && !((Canvas) current).hasBeenDrawnAfterSet())
 					{ 
 						int maxWait = 66; // Wait for a max of 66ms (~15fps interval), i don't want to start littering FreeJ2ME-Plus with compatibility flags
+						Mobile.dlog("Display", "Canvas not drawn after set, waiting up to 66ms for showNotify to trigger drawing");
 
 						while(!((Canvas) current).hasBeenDrawnAfterSet() && maxWait > 0) 
 						{
@@ -307,27 +311,39 @@ public class Display
 						}
 
 						// Still wasn't shown by the application itself? Force it to be.
-						if(!((Canvas) current).hasBeenDrawnAfterSet()) { ((Canvas) current).repaint(0, 0, current.getWidth(), current.getHeight()); }
+						if(!((Canvas) current).hasBeenDrawnAfterSet()) { 
+							Mobile.dlog("Display", "Canvas still not drawn after wait, forcing repaint");
+							((Canvas) current).repaint(0, 0, current.getWidth(), current.getHeight()); 
+						}
+						else { Mobile.dlog("Display", "Canvas drew itself within wait period"); }
 						// Also service any repaint requested before/inside showNotify().
 						((Canvas) current).serviceRepaints();
 					}
-					else { current.notifySetCurrent(); } // Displayables other than canvas have drawing dictated entirely by FreeJ2ME, so always force a draw to happen on setCurrent
+					else { 
+						Mobile.dlog("Display", "Non-canvas displayable or already drawn, calling notifySetCurrent");
+						current.notifySetCurrent(); 
+					} // Displayables other than canvas have drawing dictated entirely by FreeJ2ME, so always force a draw to happen on setCurrent
 				}
 				catch (Exception e)
 				{
 					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "SetCurrent paint block failed: " + e.getMessage());
+					Mobile.dlog("Display", "EXCEPTION in paint block: ", e.getMessage());
 					e.printStackTrace();
 				}
 
-				Mobile.log(Mobile.LOG_DEBUG, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Set Current "+current.width+", "+current.height);
+				Mobile.dlog("Display", "setCurrent complete: ", current.getClass().getName(), " size=", current.width, "x", current.height);
 			}
 		});
-		if(Mobile.compatImmediateRepaints) { setCurrentRequest.getAndSet(null).run(); }
+		if(Mobile.compatImmediateRepaints) { 
+			Mobile.dlog("Display", "Immediate repaint mode: running setCurrentRequest now");
+			setCurrentRequest.getAndSet(null).run(); 
+		}
 		else { synchronized(serializedEvents) { serializedEvents.notify(); } }
 	}
 
 	public void setCurrent(final Alert alert, final Displayable next)
 	{
+		Mobile.dlog("Display", "setCurrent(Alert, next) called with alert=", alert.getClass().getName(), " next=", next.getClass().getName());
 		setCurrentRequest.set(new Runnable()
 		{
 			@Override
@@ -339,15 +355,16 @@ public class Display
 				try
 				{
 					alert.setNextScreen(next);
-
+					Mobile.dlog("Display", "Alert setNextScreen complete");
 					current = alert;
 					current.notifySetCurrent();
-
+					Mobile.dlog("Display", "Alert displayed: next=", next.getClass().getName());
 					Mobile.log(Mobile.LOG_DEBUG, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Set Current Alert "+current.width+", "+current.height);	
 				}
 				catch (Exception e)
 				{
 					Mobile.log(Mobile.LOG_ERROR, Display.class.getPackage().getName() + "." + Display.class.getSimpleName() + ": " + "Problem with setCurrent(alert, next)");
+					Mobile.dlog("Display", "EXCEPTION in setCurrent(alert, next): ", e.getMessage());
 					e.printStackTrace();
 				}
 			}

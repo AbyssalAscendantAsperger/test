@@ -136,6 +136,7 @@
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
             const cfg = params.get('cfg') || '';
+            const debugMode = params.get('debugmodefreej2me') === '1' || params.get('debugmodefreej2me') === 'true';
             const requestedJarUrl = params.get('jarUrl') || '';
             const displayH = h;
 
@@ -155,16 +156,23 @@
             if (appJarUrl.indexOf('/emu/') === 0) appJarUrl = '/app' + appJarUrl;
             if (/^https?:\/\//i.test(appJarUrl)) appJarUrl = "/app/emu/jar/" + encodeURIComponent(token) + ".jar";
             console.log('🎯 ROM argument:', appJarUrl, cfg ? ('cfg=' + cfg) : 'cfg=<none>');
+            if (debugMode) { console.log('🐛 Debug mode ENABLED via URL parameter'); }
 
             try {
-              await cheerpjRunMain(
-                  'org.recompile.freej2me.FreeJ2ME',
-                  '/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar',
+              const runArgs = [
                   appJarUrl,
                   String(w),
                   String(h),
                   '1',
                   cfg
+              ];
+              if (debugMode) {
+                  runArgs.push('--debugmodefreej2me');
+              }
+              await cheerpjRunMain(
+                  'org.recompile.freej2me.FreeJ2ME',
+                  '/app/web5/app/freej2me.jar:/app/web5/app/freej2me-sdl.jar',
+                  ...runArgs
               );
               console.log('✨ cheerpjRunMain exited cleanly.');
             } catch (err) {

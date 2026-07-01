@@ -60,11 +60,13 @@ extends Displayable {
 
     protected Canvas() {
         Mobile.log((byte)2, Canvas.class.getPackage().getName() + "." + Canvas.class.getSimpleName() + ": Create Canvas:" + this.width + ", " + this.height);
+        Mobile.dlog("Canvas", "Constructor: ", this.getClass().getName(), " size=", this.width, "x", this.height);
         this.barHeight = Font.getDefaultFont().getHeight();
     }
 
     protected Canvas(boolean bl) {
         Mobile.log((byte)2, Canvas.class.getPackage().getName() + "." + Canvas.class.getSimpleName() + ": Create Canvas:" + this.width + ", " + this.height + " suppressKeys:" + bl);
+        Mobile.dlog("Canvas", "Constructor with suppressKeys: ", this.getClass().getName(), " size=", this.width, "x", this.height, " suppressKeys=", bl);
         this.barHeight = Font.getDefaultFont().getHeight();
         this.suppressKeyEvents = bl;
     }
@@ -270,6 +272,7 @@ extends Displayable {
     }
 
     public void hideNotify() {
+        Mobile.dlog("Canvas", "hideNotify: class=", this.getClass().getName());
     }
 
     public boolean isDoubleBuffered() {
@@ -278,14 +281,17 @@ extends Displayable {
 
     @Override
     public void keyPressed(int n) {
+        Mobile.dlog("Canvas", "keyPressed: keyCode=", n, " gameAction=", getGameAction(n), " class=", this.getClass().getName());
     }
 
     @Override
     public void keyReleased(int n) {
+        Mobile.dlog("Canvas", "keyReleased: keyCode=", n, " gameAction=", getGameAction(n), " class=", this.getClass().getName());
     }
 
     @Override
     public void keyRepeated(int n) {
+        Mobile.dlog("Canvas", "keyRepeated: keyCode=", n, " gameAction=", getGameAction(n), " class=", this.getClass().getName());
     }
 
     protected abstract void paint(Graphics var1);
@@ -308,10 +314,12 @@ extends Displayable {
 
     public void repaint(final int n, final int n2, final int n3, final int n4) {
         if (this.listCommands || this.servicing) {
+            Mobile.dlog("Canvas", "repaint skipped: listCommands=", this.listCommands, " servicing=", this.servicing, " class=", this.getClass().getName());
             return;
         }
         if (!this.isShown()) {
             this.pendingRepaint.set(true);
+            Mobile.dlog("Canvas", "repaint deferred (not shown): class=", this.getClass().getName(), " rect=[", n, ",", n2, ",", n3, "x", n4, "]");
             return;
         }
         if (!Mobile.compatImmediateRepaints) {
@@ -373,6 +381,7 @@ extends Displayable {
     }
 
     public void serviceRepaints() {
+        Mobile.dlog("Canvas", "serviceRepaints called: isShown=", this.isShown(), " pendingRepaint=", this.pendingRepaint.get(), " class=", this.getClass().getName());
         if (!this.isShown() || !this.pendingRepaint.get()) {
             return;
         }
@@ -388,17 +397,20 @@ extends Displayable {
                 }
             }
         }
+        Mobile.dlog("Canvas", "serviceRepaints: processing paints now for ", this.getClass().getName());
         Mobile.getDisplay().processPaintsNow();
         this.servicing = false;
     }
 
     public void setFullScreenMode(boolean bl) {
+        Mobile.dlog("Canvas", "setFullScreenMode: ", bl, " class=", this.getClass().getName());
         if (bl != this.fullscreen) {
             this.fullscreen = bl;
         }
     }
 
     public void showNotify() {
+        Mobile.dlog("Canvas", "showNotify: class=", this.getClass().getName(), " size=", this.width, "x", this.height);
     }
 
     @Override
