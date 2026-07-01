@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const app = express();
 const ROOT = __dirname;
@@ -48,6 +49,155 @@ setInterval(() => {
   }
 }, 60000).unref();
 
+// ---------------------------------------------------------------------------
+// JAR manifest & icon parsing (bê từ pc.js — đủ dùng cho web test)
+// ---------------------------------------------------------------------------
+function readZipEntries(buffer) {
+  if (Buffer.isBuffer(buffer)) {
+    buffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  } else if (ArrayBuffer.isView(buffer)) {
+    buffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  }
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let pos = bytes.length - 22;
+  while (pos >= 0) {
+    if (view.getUint32(pos, true) === 0x06054b50) break;
+    pos--;
+  }
+  if (pos < 0) return null;
+  const numEntries = view.getUint16(pos + 10, true);
+  let dirOffset = view.getUint32(pos + 16, true);
+  const dir = {};
+  for (let i = 0; i < numEntries; i++) {
+    if (view.getUint32(dirOffset, true) !== 0x02014b50) break;
+    const compressionMethod = view.getUint16(dirOffset + 10, true);
+    const compressedLen = view.getUint32(dirOffset + 20, true);
+    const uncompressedLen = view.getUint32(dirOffset + 24, true);
+    const filenameLen = view.getUint16(dirOffset + 28, true);
+    const extraLen = view.getUint16(dirOffset + 30, true);
+    const commentLen = view.getUint16(dirOffset + 32, true);
+    const localHeaderOffset = view.getUint32(dirOffset + 42, true);
+    dirOffset += 46;
+    let filename = '';
+    for (let n = 0; n < filenameLen; n++) filename += String.fromCharCode(bytes[dirOffset + n]);
+    dirOffset += filenameLen + extraLen + commentLen;
+    if (filename.endsWith('/')) continue;
+    const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+    const dataOffset = localHeaderOffset + 30 + filenameLen + localExtraLen;
+    dir[filename] = { compressionMethod, data: Buffer.from(buffer, dataOffset, compressedLen), uncompressedLen };
+  }
+  return dir;
+}
+function decompressEntry(entry) {
+  if (entry.compressionMethod === 0) return entry.data;
+  if (entry.compressionMethod === 8) return zlib.inflateRawSync(entry.data);
+  return null;
+}
+function mimeOf(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.bmp') return 'image/bmp';
+  return 'application/octet-stream';
+}
+function unfoldManifest(text) {
+  return text.replace(/\r\n[ \t]|\n[ \t]|\r[ \t]/g, '');
+}
+function parseManifest(text) {
+  const attrs = {};
+  unfoldManifest(text).split(/\r\n|\n|\r/).forEach(line => {
+    const i = line.indexOf(':');
+    if (i > 0) attrs[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+  });
+  return attrs;
+}
+function scoreManifestText(text) {
+  let score = 0;
+  score += (text.match(/\uFFFD/g) || []).length * 20;
+  score += (text.match(/[ÃÂ][\x80-\xBF\w]?/g) || []).length * 4;
+  score += (text.match(/â[\x80-\xBF]/g) || []).length * 4;
+  return score;
+}
+function decodeManifestBuffer(buf) {
+  const utf8 = buf.toString('utf8');
+  const latin1 = buf.toString('latin1');
+  return scoreManifestText(utf8) <= scoreManifestText(latin1) ? utf8 : latin1;
+}
+function cleanManifestText(value) {
+  let s = String(value || '');
+  s = s.replace(/https?:\/\/(?:www\.)?waptai\.com\/?/gi, ' ');
+  s = s.replace(/\b(?:www\.)?waptai\.com\b/gi, ' ');
+  s = s.replace(/\[(?:\s|\]|\[|\(|\))*\]/g, ' ');
+  s = s.replace(/[\[\]()]+/g, ' ');
+  s = s.replace(/\s*[-–—_|]+\s*$/g, '');
+  s = s.replace(/^\s*[-–—_|]+\s*/g, '');
+  s = s.replace(/[\x00-\x1F]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s;
+}
+function extractJarMetadata(jarPath) {
+  let buffer;
+  try { buffer = fs.readFileSync(jarPath); } catch (e) { return { name: null, icon: null, manifest: {} }; }
+  const dir = readZipEntries(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+  if (!dir) return { name: null, icon: null, manifest: {} };
+
+  let iconPath = null;
+  let gameName = null;
+  let manifest = {};
+  let dev = '';
+  let profile = '';
+  let config = '';
+  let version = '';
+  const mf = dir['META-INF/MANIFEST.MF'] || dir['meta-inf/manifest.mf'];
+  if (mf) {
+    try {
+      const text = decodeManifestBuffer(decompressEntry(mf));
+      manifest = parseManifest(text);
+      if (manifest['midlet-name']) gameName = manifest['midlet-name'];
+      const midlet1 = manifest['midlet-1'];
+      if (!gameName && midlet1) {
+        const parts = midlet1.split(',').map(x => x.trim());
+        if (parts[0]) gameName = parts[0];
+      }
+      dev = cleanManifestText(manifest['midlet-vendor'] || '');
+      profile = cleanManifestText(manifest['microedition-profile'] || '');
+      const pm = profile.match(/MIDP-\d+(?:\.\d+)?/i);
+      if (pm) profile = pm[0].toUpperCase();
+      config = cleanManifestText(manifest['microedition-configuration'] || '');
+      const cm = config.match(/CLDC-\d+(?:\.\d+)?/i);
+      if (cm) config = cm[0].toUpperCase();
+      version = cleanManifestText(manifest['midlet-version'] || '');
+      iconPath = manifest['midlet-icon'] || null;
+      if (!iconPath && midlet1) {
+        const parts = midlet1.split(',').map(x => x.trim());
+        if (parts[1]) iconPath = parts[1];
+      }
+    } catch (e) {}
+  }
+
+  let icon = null;
+  if (iconPath) {
+    iconPath = iconPath.replace(/^\//, '');
+    if (dir[iconPath]) {
+      try { icon = { mime: mimeOf(iconPath), buffer: decompressEntry(dir[iconPath]) }; } catch (e) {}
+    }
+  }
+  if (!icon) {
+    const imgExt = /\.(png|jpg|jpeg|gif|bmp)$/i;
+    const imgs = Object.keys(dir).filter(imgExt.test.bind(imgExt));
+    imgs.sort((a, b) => {
+      const score = f => (/icon|logo/i.test(f) ? 0 : 1);
+      return score(a) - score(b);
+    });
+    for (const f of imgs) {
+      try { icon = { mime: mimeOf(f), buffer: decompressEntry(dir[f]) }; break; } catch (e) {}
+    }
+  }
+  if (gameName) gameName = cleanManifestText(gameName);
+  return { name: gameName || null, icon, manifest, dev, profile, config, version };
+}
+
 function extractResolution(fileName) {
   const m = String(fileName || '').match(/(\d{2,4})\s*[x×]\s*(\d{2,4})/i);
   if (m) {
@@ -82,12 +232,20 @@ function buildGameRegistry() {
   for (const file of files) {
     const fullPath = path.join(JAR_DIR, file);
     const id = 'g' + crypto.createHash('sha1').update(file).digest('hex').slice(0, 14);
+    let meta = { name: null, icon: null, dev: '', profile: '', config: '', version: '' };
+    try { meta = extractJarMetadata(fullPath); } catch (e) { dbg('extractJarMetadata error', file, e && e.message || e); }
+    const name = meta.name || cleanName(file);
     gameRegistry.set(id, {
       id,
       file,
-      name: cleanName(file),
+      name,
       fullPath,
-      resolution: extractResolution(file)
+      resolution: extractResolution(file),
+      icon: meta.icon || null,
+      dev: meta.dev || 'Unknown',
+      profile: meta.profile || 'Unknown',
+      config: meta.config || '',
+      version: meta.version || ''
     });
   }
   dbg('buildGameRegistry count=' + gameRegistry.size);
@@ -156,10 +314,28 @@ app.get('/api/jars', (req, res) => {
     name: g.name,
     file: g.file,
     resolution: g.resolution,
-    hasIcon: false
+    hasIcon: !!g.icon,
+    dev: g.dev,
+    profile: g.profile,
+    config: g.config,
+    version: g.version
   }));
-  dbg('API /api/jars count=' + games.length);
-  res.json({ games, devs: [], profiles: [] });
+  const devs = [...new Set(games.map(g => g.dev).filter(v => v && v !== 'Unknown'))].sort((a, b) => a.localeCompare(b, 'vi'));
+  const profiles = [...new Set(games.map(g => g.profile).filter(v => v && v !== 'Unknown'))].sort();
+  dbg('API /api/jars count=' + games.length + ' devs=' + devs.length + ' profiles=' + profiles.length);
+  res.json({ games, devs, profiles });
+});
+
+// Icon từ JAR (cache dài vì icon ít đổi)
+app.get('/api/icon/:id', (req, res) => {
+  rebuildGameRegistryIfNeeded();
+  const game = gameRegistry.get(String(req.params.id || ''));
+  if (!game || !game.icon || !game.icon.buffer) {
+    return res.status(404).send('no icon');
+  }
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Content-Type', game.icon.mime || 'application/octet-stream');
+  res.send(game.icon.buffer);
 });
 
 app.get('/api/launch', (req, res) => {

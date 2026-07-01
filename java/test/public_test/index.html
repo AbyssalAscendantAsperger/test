@@ -8,9 +8,16 @@
     *{box-sizing:border-box} body{margin:0;font-family:system-ui,sans-serif;background:#0f0f1a;color:#ddd}
     #gallery{height:100vh;display:flex;flex-direction:column;padding:16px} .header{text-align:center;margin-bottom:16px}
     .jar-list-wrap{flex:1;overflow:auto}.jar-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-    .jar-card{background:#1a1a2e;border-radius:12px;padding:12px;border:1px solid #333;cursor:pointer;display:flex;gap:10px;align-items:center}
-    .jar-card:hover{border-color:#00d4ff}.game-icon-placeholder{width:40px;height:40px;border-radius:8px;background:#0a0a1e;display:flex;align-items:center;justify-content:center}
-    .jar-name{color:#fff;font-size:12px;font-weight:600}.game-res{font-size:10px;color:#888}.play-btn{background:#00d4ff;color:#000;border:none;padding:5px 10px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:11px;margin-top:4px;width:100%}
+    .jar-card{background:#1a1a2e;border-radius:12px;padding:12px;border:1px solid #333;cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+    .jar-card:hover{border-color:#00d4ff}
+    .game-icon{width:40px;height:40px;border-radius:8px;background:#0a0a1e;object-fit:contain;image-rendering:pixelated;flex:0 0 auto}
+    .game-icon-placeholder{width:40px;height:40px;border-radius:8px;background:#0a0a1e;display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:18px}
+    .game-info{flex:1;min-width:0}
+    .jar-name{color:#fff;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .game-res{font-size:10px;color:#888;margin-top:2px}
+    .meta-line{font-size:10px;color:#7a7a95;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meta-line.file{color:#555;font-size:9px;font-style:italic}
+    .play-btn{background:#00d4ff;color:#000;border:none;padding:5px 10px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:11px;margin-top:6px;width:100%}
     #gameView{display:none;position:fixed;inset:0;background:#0a0a0f;z-index:9999;flex-direction:column} #gameView.visible{display:flex}
     .modal-header{background:#0e0e16;padding:4px 10px;display:flex;align-items:center;gap:6px;height:32px;border-bottom:1px solid #1a1a2e}
     .modal-header h3{color:#00d4ff;font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -78,7 +85,47 @@ function getSearchQuery(){ return (document.getElementById('searchBox')?.value||
 function isSearchActive(){ return getSearchQuery().length>=SEARCH_MIN_CHARS; }
 function getFilteredGames(){ const q=getSearchQuery().toLowerCase(); if(!isSearchActive()) return allGames.slice(); return allGames.filter(g=> (g.name||'').toLowerCase().includes(q) || (g.file||'').toLowerCase().includes(q)); }
 function getVisibleGames(){ const filtered=getFilteredGames(); if(isSearchActive()) return { games: filtered, limited:false, total:filtered.length }; const sorted=filtered.slice().sort((a,b)=>(randomRank.get(a.id)??0)-(randomRank.get(b.id)??0)); return { games: sorted.slice(0,DEFAULT_RANDOM_LIMIT), limited: sorted.length>DEFAULT_RANDOM_LIMIT, total: filtered.length }; }
-function renderGameList(){ const container=document.getElementById('jarList'); const status=document.getElementById('status'); const hint=document.getElementById('searchHint'); if(!container) return; const q=getSearchQuery(); const visible=getVisibleGames(); container.innerHTML=''; if(!visible.games.length){ container.innerHTML='<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>'; if(status) status.textContent='Không có kết quả'; return; } visible.games.forEach(game=>{ const r=game.resolution||{}; const card=document.createElement('div'); card.className='jar-card'; card.innerHTML='<div class="game-icon-placeholder">🎮</div><div style="flex:1"><div class="jar-name">'+escapeHtml(game.name)+'</div><div class="game-res">'+(r.width||'?')+'×'+(r.height||'?')+'<br>'+escapeHtml(game.file||'')+'</div><button class="play-btn">▶ Chơi mode5</button></div>'; card.onclick=()=>launchGame(game.id,game.name); container.appendChild(card); }); if(status){ if(isSearchActive()) status.textContent='Có '+allGames.length+' game • kết quả tìm kiếm: '+visible.games.length; else status.textContent='Có '+allGames.length+' game • đang hiển thị ngẫu nhiên '+visible.games.length+'/'+visible.total; } if(hint){ if(q.length===0) hint.textContent=''; else if(q.length<SEARCH_MIN_CHARS) hint.textContent='Nhập ít nhất '+SEARCH_MIN_CHARS+' ký tự để tìm ('+q.length+'/'+SEARCH_MIN_CHARS+'). Hiện chỉ hiển thị 10 game ngẫu nhiên để tránh lag.'; else hint.textContent='Đã lọc theo: "'+q+'"'; } dbg('renderGameList visible='+visible.games.length+' total='+visible.total+' searchActive='+isSearchActive()); }
+function iconHtmlFor(game){
+  return game.hasIcon
+    ? '<img class="game-icon" src="/api/icon/'+encodeURIComponent(game.id)+'" onerror="this.outerHTML=\'<div class=game-icon-placeholder>🎮<\\/div>\'">'
+    : '<div class="game-icon-placeholder">🎮</div>';
+}
+function renderGameList(){
+  const container=document.getElementById('jarList');
+  const status=document.getElementById('status');
+  const hint=document.getElementById('searchHint');
+  if(!container) return;
+  const q=getSearchQuery();
+  const visible=getVisibleGames();
+  container.innerHTML='';
+  if(!visible.games.length){
+    container.innerHTML='<div style="color:#ff6b6b;text-align:center">Không tìm thấy game</div>';
+    if(status) status.textContent='Không có kết quả';
+    return;
+  }
+  visible.games.forEach(game=>{
+    const r=game.resolution||{};
+    const card=document.createElement('div');
+    card.className='jar-card';
+    const resLine='<div class="game-res">'+(r.width||'?')+'×'+(r.height||'?')+'</div>';
+    const devLine='<div class="meta-line">Dev: '+escapeHtml(game.dev||'Unknown')+'</div>';
+    const profLine='<div class="meta-line">'+escapeHtml(game.profile||'Unknown')+(game.config?' • '+escapeHtml(game.config):'')+(game.version?' • v'+escapeHtml(game.version):'')+'</div>';
+    const fileLine='<div class="meta-line file">'+escapeHtml(game.file||'')+'</div>';
+    card.innerHTML=iconHtmlFor(game)+'<div class="game-info"><div class="jar-name">'+escapeHtml(game.name)+'</div>'+resLine+devLine+profLine+fileLine+'<button class="play-btn">▶ Chơi mode5</button></div>';
+    card.onclick=()=>launchGame(game.id,game.name);
+    container.appendChild(card);
+  });
+  if(status){
+    if(isSearchActive()) status.textContent='Có '+allGames.length+' game • kết quả tìm kiếm: '+visible.games.length;
+    else status.textContent='Có '+allGames.length+' game • đang hiển thị ngẫu nhiên '+visible.games.length+'/'+visible.total;
+  }
+  if(hint){
+    if(q.length===0) hint.textContent='';
+    else if(q.length<SEARCH_MIN_CHARS) hint.textContent='Nhập ít nhất '+SEARCH_MIN_CHARS+' ký tự để tìm ('+q.length+'/'+SEARCH_MIN_CHARS+'). Hiện chỉ hiển thị 10 game ngẫu nhiên để tránh lag.';
+    else hint.textContent='Đã lọc theo: "'+q+'"';
+  }
+  dbg('renderGameList visible='+visible.games.length+' total='+visible.total+' searchActive='+isSearchActive());
+}
 function onSearchInputDebounced(){ const q=getSearchQuery(); const hint=document.getElementById('searchHint'); if(searchDebounceTimer){ clearTimeout(searchDebounceTimer); searchDebounceTimer=null; } if(q.length===0){ if(hint) hint.textContent=''; renderGameList(); return; } if(q.length<SEARCH_MIN_CHARS){ renderGameList(); return; } if(hint) hint.textContent='Đang chờ gõ xong '+(SEARCH_DEBOUNCE_MS/1000)+'s...'; searchDebounceTimer=setTimeout(()=>{ searchDebounceTimer=null; renderGameList(); }, SEARCH_DEBOUNCE_MS); }
 async function loadJars(){dbg('loadJars start'); try{const res=await fetch('/api/jars'); const data=await res.json(); allGames=data.games||[]; assignRandomRanks(); renderGameList(); dbg('loadJars done count='+allGames.length);}catch(e){dbg('loadJars error',e&&e.message||e); document.getElementById('status').textContent='Lỗi tải game';}}
 function stopRunnerWatchdog(){ if(watchdogTimer){ clearInterval(watchdogTimer); watchdogTimer=null; } }
@@ -100,5 +147,5 @@ window.addEventListener('resize',()=>setTimeout(fitFrame,100));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('gameView').classList.contains('visible')) closeEmulator(); });
 document.addEventListener('DOMContentLoaded',()=>{ bindGamepadButtons(); const sb=document.getElementById('searchBox'); if(sb){ sb.addEventListener('input', onSearchInputDebounced); sb.addEventListener('keydown', e=>{ if(e.key==='Enter'){ if(searchDebounceTimer){ clearTimeout(searchDebounceTimer); searchDebounceTimer=null; } renderGameList(); } }); } loadJars(); dbg('DOMContentLoaded done'); });
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a144158bdbe5a0c5',t:'MTc4Mjg5NDk5OA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
