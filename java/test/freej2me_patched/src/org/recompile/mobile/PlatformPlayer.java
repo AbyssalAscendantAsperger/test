@@ -108,6 +108,7 @@ public class PlatformPlayer implements Player
 
 	public PlatformPlayer(InputStream stream, String type)
 	{
+		Mobile.hb("PlatformPlayer:ctor", "type=" + type + " sound=" + Mobile.sound);
 		listeners = new Vector<PlayerListener>();
 		siemensListeners = new Vector<com.siemens.mp.media.PlayerListener>();
 		kddiListeners = new Vector<com.kddi.media.MediaEventListener>();
@@ -272,6 +273,7 @@ public class PlatformPlayer implements Player
 
 	public PlatformPlayer(String locator)
 	{
+		Mobile.hb("PlatformPlayer:ctor(locator)", "locator=" + locator);
 		if(locator.equals(Manager.TONE_DEVICE_LOCATOR) || locator.equals(Manager.MIDI_DEVICE_LOCATOR)) 
 		{
 			Mobile.log(Mobile.LOG_WARNING, PlatformPlayer.class.getPackage().getName() + "." + PlatformPlayer.class.getSimpleName() + ": " + " Creating MIDI Player for locator: "+locator);
@@ -316,12 +318,13 @@ public class PlatformPlayer implements Player
 	public void start()
 	{
 		if(getState() == Player.CLOSED) { throw new IllegalStateException("Cannot call start() on a CLOSED player."); }
-		
-		if(getState() == Player.UNREALIZED) { realize(); }
+		Mobile.hb("PlatformPlayer.start:enter", "type=" + contentType + " state=" + getState());
 
-		if(getState() == Player.REALIZED) { prefetch(); }
+		if(getState() == Player.UNREALIZED) { Mobile.hb("PlatformPlayer.start:->realize", contentType); realize(); Mobile.hb("PlatformPlayer.start:realize->done", contentType); }
 
-		if(getState() == Player.PREFETCHED) { player.start(); }
+		if(getState() == Player.REALIZED) { Mobile.hb("PlatformPlayer.start:->prefetch", contentType); prefetch(); Mobile.hb("PlatformPlayer.start:prefetch->done", contentType); }
+
+		if(getState() == Player.PREFETCHED) { Mobile.hb("PlatformPlayer.start:->player.start", contentType); player.start(); Mobile.hb("PlatformPlayer.start:player.start->done", contentType); }
 	}
 
 	public void stop()

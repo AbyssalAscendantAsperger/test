@@ -135,7 +135,15 @@ public class Mobile {
 	 */
 	public static final void dlog(String tag, String msg) {
 		if (!debugMode) return;
-		log(LOG_DEBUG, "[DEBUG:" + tag + "] " + msg);
+		// [PATCH-L1] print directly to bypass the pendingLogs queue: on CheerpJ the
+		// queue drainer holds a monitor while doing I/O, which can hide crucial
+		// diagnostic output if any producer/consumer stalls. Direct println is
+		// picked up by cheerpj_run.html console.log hook and shipped to server.
+		String line = "[DEBUG:" + tag + "] " + msg;
+		try { System.out.println(line); } catch (Throwable ignored) {}
+		try { System.err.println(line); } catch (Throwable ignored) {}
+		// Still enqueue to keep the file logger behaviour identical.
+		log(LOG_DEBUG, line);
 	}
 
 	/**
@@ -148,7 +156,33 @@ public class Mobile {
 		for (Object p : parts) {
 			sb.append(p);
 		}
-		log(LOG_DEBUG, sb.toString());
+		String line = sb.toString();
+		try { System.out.println(line); } catch (Throwable ignored) {}
+		try { System.err.println(line); } catch (Throwable ignored) {}
+		log(LOG_DEBUG, line);
+	}
+
+	/* [PATCH-L1] Unconditional heartbeat — ALWAYS prints regardless of debugMode.
+	 * Use very sparingly (life-cycle boundaries: MIDlet ctor, startApp, painter loop).
+	 * Bypasses the log queue entirely so it survives any locking issue.
+	 * Format: [HB tag T=<uptime-ms>] extra */
+	private static final long HB_T0 = System.currentTimeMillis();
+	public static final void hb(String tag) { hb(tag, ""); }
+	public static final void hb(String tag, String extra) {
+		long dt = System.currentTimeMillis() - HB_T0;
+		String line = "[HB " + tag + " T=" + dt + "ms]" + (extra == null || extra.isEmpty() ? "" : " " + extra);
+		try { System.out.println(line); } catch (Throwable ignored) {}
+		try { System.err.println(line); } catch (Throwable ignored) {}
+	}
+	/* Rate-limited heartbeat (per-tag). Returns true if printed. */
+	private static final java.util.concurrent.ConcurrentHashMap<String,Long> HB_LAST = new java.util.concurrent.ConcurrentHashMap<>();
+	public static final boolean hbRate(String tag, long minIntervalMs, String extra) {
+		long now = System.currentTimeMillis();
+		Long prev = HB_LAST.get(tag);
+		if (prev != null && (now - prev.longValue()) < minIntervalMs) return false;
+		HB_LAST.put(tag, now);
+		hb(tag, extra);
+		return true;
 	}
     public static final int KDDI_UP = 1;
     public static final int KDDI_DOWN = 6;

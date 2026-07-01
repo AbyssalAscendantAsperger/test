@@ -64,6 +64,17 @@ public class FreeJ2ME {
         System.out.println("==================================================================================");
         System.out.println("[ARENA-V8-FINAL] DEFINITIVE CORE V8 (ZERO LAG + WASD + KEYMAP BRIDGE) LOADED!");
         System.out.println("==================================================================================");
+        // [PATCH-L1] Global uncaught-exception net so any silent thread death is visible
+        // in the JS console (and hence in the runner /api/browser-log stream).
+        try {
+            Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                @Override public void uncaughtException(Thread t, Throwable e) {
+                    Mobile.hb("UNCAUGHT", "thread=" + t.getName() + " ex=" + e.getClass().getName() + ": " + e.getMessage());
+                    try { e.printStackTrace(); } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable ignored) {}
+        Mobile.hb("main:enter", "argc=" + stringArray.length);
         ArrayList<String> arrayList = new ArrayList<String>();
         for (int i = 0; i < stringArray.length; ++i) {
             if (stringArray[i].equals("--web")) {
@@ -85,15 +96,27 @@ public class FreeJ2ME {
         if (webMode) {
             System.setProperty("freej2me.web", "true");
             System.setProperty("freej2me.systemPath", "/files/freej2me/freej2me_system");
+            // [PATCH-L1] On web (CheerpJ) test build we ALWAYS want dlog() to fire —
+            // otherwise silent hangs are invisible. Users can NOT disable it in web mode
+            // because this build's only purpose is diagnostics. Comment out this line
+            // for a "quiet" web build.
+            if (!org.recompile.mobile.Mobile.debugMode) {
+                org.recompile.mobile.Mobile.debugMode = true;
+                Mobile.hb("Boot", "web mode detected → debugMode auto-ON");
+            }
         }
+        Mobile.hb("main:beforeClearOldLog", "");
         Mobile.clearOldLog();
+        Mobile.hb("main:beforeNewFreeJ2ME", "webMode=" + webMode);
         app = new FreeJ2ME(stringArray);
+        Mobile.hb("main:afterNewFreeJ2ME", "");
         try {
             FreeJ2ME.checkExtInputFile();
         }
         catch (IOException iOException) {
             Mobile.log((byte)4, FreeJ2ME.class.getPackage().getName() + "." + FreeJ2ME.class.getSimpleName() + ": Couldn't setup external input reader...");
         }
+        Mobile.hb("main:exit", "");
     }
 
     private static boolean isIntegerString(String string) {

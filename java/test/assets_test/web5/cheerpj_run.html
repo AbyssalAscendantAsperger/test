@@ -37,8 +37,16 @@
         const oLog = console.log; console.log = function(...a) { oLog.apply(console, a); relayLog('INFO', a); };
         const oErr = console.error; console.error = function(...a) { oErr.apply(console, a); relayLog('ERROR', a); };
         const oWarn = console.warn; console.warn = function(...a) { oWarn.apply(console, a); relayLog('WARN', a); };
+        const oDbg = console.debug; console.debug = function(...a) { try{oDbg && oDbg.apply(console, a);}catch(_){} relayLog('DEBUG', a); };
         window.onerror = function(m, u, l, c, e) { relayLog('FATAL', [m, 'at', l + ':' + c, e ? e.stack : '']); };
         window.onunhandledrejection = function(e) { relayLog('UNHANDLED', [e.reason ? (e.reason.stack || e.reason) : e]); };
+        // [PATCH-L1] JS main-thread liveness ping: if this stops firing the browser tab
+        // (or the CheerpJ worker owning the event loop) is dead. Independent from Java
+        // side heartbeats, so we can tell where a hang really lives.
+        (function(){
+          let n = 0;
+          setInterval(function(){ relayLog('PING', ['js-alive tick=' + (++n) + ' t=' + Date.now()]); }, 2000);
+        })();
         async function Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication(lib, app) {
           window.__freej2meApp = app;
           console.log('[Mode5-KeyBridge] Java FreeJ2ME app instance exposed to JS. Direct virtual input enabled.');
@@ -136,7 +144,11 @@
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
             const cfg = params.get('cfg') || '';
-            const debugMode = params.get('debugmodefreej2me') === '1' || params.get('debugmodefreej2me') === 'true';
+            // [PATCH-L1] Web test build: debug mode is ON by default (this build's only
+            // purpose is diagnostic). Explicitly pass ?debugmodefreej2me=0 to disable.
+            const dbgParam = params.get('debugmodefreej2me');
+            const debugMode = dbgParam === null ? true : (dbgParam === '1' || dbgParam === 'true');
+            console.log('[V9-BOOT] debugmodefreej2me =', debugMode, '(url param=' + dbgParam + ')');
             const requestedJarUrl = params.get('jarUrl') || '';
             const displayH = h;
 

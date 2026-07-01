@@ -786,6 +786,9 @@ public class MobilePlatform {
 
     public final void flushGraphics(PlatformImage platformImage, int n, int n2, int n3, int n4) {
         if (!Mobile.isPaused && !appTerminated) {
+            // [PATCH-L1] Rate-limited paint heartbeat (1 line every 2s) — proves the
+            // MIDlet loop is actually rendering; absence of ticks == real hang.
+            Mobile.hbRate("paint", 2000L, n3 + "x" + n4);
             this.gcFrontbuffer.flushGraphics(platformImage, n, n2, n3, n4);
             if (postDraw != null) {
                 postDraw.run();

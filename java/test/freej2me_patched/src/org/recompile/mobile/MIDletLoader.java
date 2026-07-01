@@ -440,14 +440,18 @@ public class MIDletLoader extends URLClassLoader
 			{
 				Mobile.dlog("MIDletLoader", "Initializing MIDlet with properties. Count=", properties.size());
 				MIDlet.initAppProperties(properties);
+				Mobile.hb("MIDletLoader:beforeCtor", mainClass.getName());
 				midletInst = (MIDlet)constructor.newInstance();
+				Mobile.hb("MIDletLoader:afterCtor", midletInst.getClass().getName());
 				Mobile.dlog("MIDletLoader", "MIDlet instance created: ", midletInst.getClass().getName());
 			}
 			else 
 			{
 				Mobile.dlog("MIDletLoader", "Initializing IApplication with properties. Count=", properties.size());
 				IApplication.initAppProperties(properties);
+				Mobile.hb("MIDletLoader:beforeCtor(DoJa)", mainClass.getName());
 				IAppliInst = (IApplication) constructor.newInstance();
+				Mobile.hb("MIDletLoader:afterCtor(DoJa)", IAppliInst.getClass().getName());
 				Mobile.dlog("MIDletLoader", "IApplication instance created: ", IAppliInst.getClass().getName());
 			}
 
@@ -471,8 +475,16 @@ public class MIDletLoader extends URLClassLoader
 				}
 			}
 
-			Mobile.dlog("MIDletLoader", "Invoking startApp on: ", (Mobile.isDoJa ? IAppliInst : midletInst).getClass().getName());
-			start.invoke(Mobile.isDoJa ? IAppliInst : midletInst);
+			Object appInst = Mobile.isDoJa ? IAppliInst : midletInst;
+			Mobile.dlog("MIDletLoader", "Invoking startApp on: ", appInst.getClass().getName());
+			Mobile.hb("MIDletLoader:beforeStartApp", appInst.getClass().getName());
+			try {
+				start.invoke(appInst);
+				Mobile.hb("MIDletLoader:afterStartApp", "returned normally");
+			} catch (Throwable t) {
+				Mobile.hb("MIDletLoader:startAppThrew", t.getClass().getName() + ": " + t.getMessage());
+				throw t;
+			}
 			Mobile.dlog("MIDletLoader", "startApp invoked successfully");
 			return true;
 		}
