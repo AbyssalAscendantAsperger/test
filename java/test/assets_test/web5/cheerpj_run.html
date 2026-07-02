@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
-    <title>J2ME CheerpJ Mode 5 SAME-PORT</title>
+    <title>J2ME CheerpJ Mode 5 (Online Modern Runtime)</title>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; display: flex; justify-content: center; align-items: center; user-select: none; -webkit-user-select: none; }
         #contenedor-juego { position: relative; overflow: hidden; image-rendering: pixelated; outline: none; }
@@ -37,8 +37,16 @@
         const oLog = console.log; console.log = function(...a) { oLog.apply(console, a); relayLog('INFO', a); };
         const oErr = console.error; console.error = function(...a) { oErr.apply(console, a); relayLog('ERROR', a); };
         const oWarn = console.warn; console.warn = function(...a) { oWarn.apply(console, a); relayLog('WARN', a); };
+        const oDbg = console.debug; console.debug = function(...a) { try{oDbg && oDbg.apply(console, a);}catch(_){} relayLog('DEBUG', a); };
         window.onerror = function(m, u, l, c, e) { relayLog('FATAL', [m, 'at', l + ':' + c, e ? e.stack : '']); };
         window.onunhandledrejection = function(e) { relayLog('UNHANDLED', [e.reason ? (e.reason.stack || e.reason) : e]); };
+        
+        // JS main-thread liveness ping
+        (function(){
+          let n = 0;
+          setInterval(function(){ relayLog('PING', ['js-alive tick=' + (++n) + ' t=' + Date.now()]); }, 2000);
+        })();
+
         async function Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication(lib, app) {
           window.__freej2meApp = app;
           console.log('[Mode5-KeyBridge] Java FreeJ2ME app instance exposed to JS. Direct virtual input enabled.');
@@ -46,7 +54,7 @@
         }
     </script>
     <script>
-        // Same key bridge as assets_pc/web5/cheerpj_run.html.
+        // Key bridge cho AWT / CheerpJ
         (function(){
           let virtualKeyQueue = Promise.resolve();
           const keyState = new Map();
@@ -124,19 +132,27 @@
           document.addEventListener('visibilitychange', function(){ if (document.hidden) keyState.clear(); }, true);
         })();
     </script>
-    <script src="./cheerpj/4.3/loader.js"></script>
+    <!-- TẢI TRỰC TIẾP ENGINE CHEERPJ BẢN MỚI NHẤT TỪ CDN CHÍNH THỨC CỦA LEANING TECHNOLOGIES -->
+    <script src="https://cjrtnc.leaningtech.com/4.3/loader.js"></script>
 </head>
 <body>
     <div id="contenedor-juego" tabindex="0"></div>
     <script>
         (async function () {
-            console.log('🌐 Booting CheerpJ Mode 5 SAME-PORT 3015...');
+            console.log('🌐 Booting CheerpJ Mode 5 (Online Modern Runtime)...');
             const params = new URLSearchParams(window.location.search);
             const token = params.get('token');
             const w = parseInt(params.get('width') || '240', 10);
             const h = parseInt(params.get('height') || '320', 10);
             const cfg = params.get('cfg') || '';
-            const debugMode = params.get('debugmodefreej2me') === '1' || params.get('debugmodefreej2me') === 'true';
+            
+            // Cho phép chọn phiên bản Java linh hoạt qua tham số URL (?javaVersion=11 hoặc 17, 8).
+            // Mặc định là 8 để chạy freej2me.jar gốc, nếu bạn đã build lại jar lên JDK 11 thì đổi số 8 thành 11 hoặc truyền ?javaVersion=11
+            const javaVersion = parseInt(params.get('javaVersion') || '8', 10);
+
+            const dbgParam = params.get('debugmodefreej2me');
+            const debugMode = dbgParam === null ? true : (dbgParam === '1' || dbgParam === 'true');
+            console.log('[V9-BOOT] debugmodefreej2me =', debugMode, '(url param=' + dbgParam + ')');
             const requestedJarUrl = params.get('jarUrl') || '';
             const displayH = h;
 
@@ -144,9 +160,12 @@
             container.style.width = w + 'px';
             container.style.height = displayH + 'px';
 
-            console.log('⏳ Initializing CheerpJ VM...');
-            await cheerpjInit({ natives: { Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication } });
-            console.log('✅ CheerpJ VM initialized.');
+            console.log(`⏳ Initializing CheerpJ VM (Java ${javaVersion} Online Mode)...`);
+            await cheerpjInit({
+                version: javaVersion,
+                natives: { Java_org_recompile_freej2me_FreeJ2ME_nativeSetApplication }
+            });
+            console.log(`✅ CheerpJ VM initialized (Java ${javaVersion}).`);
 
             cheerpjCreateDisplay(w, displayH, container);
             try { container.focus(); } catch(e) {}
