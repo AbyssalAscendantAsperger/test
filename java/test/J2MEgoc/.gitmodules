@@ -1,0 +1,3 @@
+[submodule "external/freej2me"]
+	path = external/freej2me
+	url = https://github.com/hex007/freej2me.git
